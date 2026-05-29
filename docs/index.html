@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiet Room — Support</title>
+  <meta name="description" content="Support and FAQ for Quiet Room." />
+  <meta name="theme-color" content="#f7f4ec" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <a class="wordmark" href="./" aria-label="Quiet Room home">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="3.2" y="3.2" width="13" height="15.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <rect x="7.8" y="7.8" width="13" height="15.5" rx="1.6" fill="var(--paper)" stroke="currentColor" stroke-width="1.5"/>
+</svg>
+      Quiet <em>Room</em>
+    </a>
+    <nav class="topnav" aria-label="Primary">
+      <a href="./" aria-current="page">Support</a><a href="privacy.html">Privacy</a><a href="https://github.com/kiddkevin00/quietroom">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="mast" aria-labelledby="mast-title">
+    <p class="eyebrow">Support<span class="dot"></span>The manual</p>
+    <h1 class="display" id="mast-title">
+      Quiet<br>
+      <em>Room<span class="punct">.</span></em>
+    </h1>
+    <div class="mast-rule" aria-hidden="true"></div>
+    <p class="lede">Ambient noise for iPhone, <em>generated on your device</em> — no streaming, no ads between tracks, no account.</p>
+    <p class="meta">v1.0.0<span class="sep">·</span>iPhone · iOS 16+</p>
+  </section>
+
+  <main>
+
+    <article class="doc">
+      <aside class="doc-num" aria-hidden="true">01</aside>
+      <section class="doc-body">
+        <p class="doc-eyebrow">Overview</p>
+        <h2>How it works</h2>
+        <p>Pick a sound. Tap the big play button. Set a sleep timer if you want it to fade out on its own.</p><ul><li><strong>White</strong> — even hiss across all frequencies. Cuts conversation cleanly.</li><li><strong>Pink</strong> — softer, lower energy than white. Closer to leaves moving in wind.</li><li><strong>Brown</strong> — deep, rumbling. Surf, distant waterfall.</li><li><strong>Rain</strong> — filtered noise with scattered patter to suggest drops.</li></ul>
+      </section>
+    </article>
+
+    <article class="doc">
+      <aside class="doc-num" aria-hidden="true">02</aside>
+      <section class="doc-body">
+        <p class="doc-eyebrow">How the sound is made</p>
+        <h2>Where do the sounds come from?</h2>
+        <p>They're <strong>synthesized</strong> in JavaScript the first time you tap play. The app computes 10-second WAV files for each noise type using classic noise-generation algorithms (Paul Kellett's pink filter, integrated Brownian motion for brown noise, low-passed pink + scattered impulses for rain), writes them to the app's cache directory, then loops them through the audio engine.</p><p>This means: no audio files shipped with the app, no streaming, no licensed samples to worry about, and after first launch playback works fully offline.</p>
+      </section>
+    </article>
+
+    <article class="doc">
+      <aside class="doc-num" aria-hidden="true">03</aside>
+      <section class="doc-body">
+        <p class="doc-eyebrow">Sleep timer</p>
+        <h2>How does the sleep timer work?</h2>
+        <p>Pick a length (15–90 minutes). When you start playback the timer arms. When it expires, playback stops cleanly. Selecting <strong>Off</strong> disables it. Changing the timer while playing extends or shortens the current run.</p>
+      </section>
+    </article>
+
+    <article class="doc">
+      <aside class="doc-num" aria-hidden="true">04</aside>
+      <section class="doc-body">
+        <p class="doc-eyebrow">Audio behavior</p>
+        <h2>Will it play with my phone on silent?</h2>
+        <p>Yes — the app sets the iOS audio category to play in silent mode. Background playback is not enabled in this Expo Go build because that requires a custom native entitlement; if you lock your phone playback may suspend. The screen is kept awake while the app is open and playing.</p>
+      </section>
+    </article>
+
+  </main>
+
+  <aside class="contact-card">
+    <p class="eyebrow">Card<span class="dot"></span>No. 01</p>
+    <h3>Need help, or want to <em>report a bug</em>?</h3>
+    <p>Open an issue on GitHub. There's no support email — issues are the canonical channel and they're public, which keeps everything honest.</p>
+    <p class="link-row"><a href="https://github.com/kiddkevin00/quietroom/issues">github.com/kiddkevin00/quietroom/issues</a></p>
+  </aside>
+
+  <footer class="colophon">
+    <div class="colophon-left">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="3.2" y="3.2" width="13" height="15.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <rect x="7.8" y="7.8" width="13" height="15.5" rx="1.6" fill="var(--paper)" stroke="currentColor" stroke-width="1.5"/>
+</svg>
+      Quiet <em>Room</em> · Mark Utility Labs
+    </div>
+    <nav class="colophon-meta" aria-label="Footer">
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/kiddkevin00/quietroom">Source</a>
+      <a href="https://github.com/kiddkevin00/quietroom/issues">Issues</a>
+    </nav>
+  </footer>
+
+</div>
+</body>
+</html>
