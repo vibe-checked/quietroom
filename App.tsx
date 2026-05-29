@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -138,6 +138,11 @@ export default function App() {
   const [timerEnds, setTimerEnds] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const soundRef = useRef<Audio.Sound | null>(null);
+  // Monotonically-increasing token. Each play/swap captures its own
+  // value; if a newer call has fired by the time createAsync resolves,
+  // the older one bails and unloads the just-created sound to prevent
+  // an orphan looping forever.
+  const playTokenRef = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -154,9 +159,9 @@ export default function App() {
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
           shouldDuckAndroid: true,
-          interruptionModeIOS: 1, // do not mix
-          interruptionModeAndroid: 1,
-        } as any);
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        });
       } catch {}
     })();
     return () => {
@@ -170,43 +175,15 @@ export default function App() {
 
   // Ticking clock for sleep timer countdown display
   useEffect(() => {
-    if (!timerEnds) return;
+    if (timerEnds == null) return;
     const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
   }, [timerEnds]);
 
-  // Auto-stop on timer expiry
-  useEffect(() => {
-    if (!playing || !timerEnds) return;
-    if (now >= timerEnds) {
-      stop();
-    }
-  }, [now, timerEnds, playing]);
-
-  const play = useCallback(async () => {
-    try {
-      setGenerating(selected);
-      const path = await ensureSampleFile(selected);
-      setGenerating(null);
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: path },
-        { shouldPlay: true, isLooping: true, volume: 1.0 },
-      );
-      soundRef.current = sound;
-      setPlaying(true);
-      if (timerMin > 0) setTimerEnds(Date.now() + timerMin * 60 * 1000);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    } catch (e) {
-      setGenerating(null);
-      console.warn('Play failed', e);
-    }
-  }, [selected, timerMin]);
-
   const stop = useCallback(async () => {
+    // Bump the play token so any in-flight createAsync from a previous
+    // call cleans up its own sound when it resolves.
+    playTokenRef.current += 1;
     try {
       await soundRef.current?.stopAsync();
       await soundRef.current?.unloadAsync();
@@ -217,14 +194,60 @@ export default function App() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
+  // Auto-stop on timer expiry
+  useEffect(() => {
+    if (!playing || timerEnds == null) return;
+    if (now >= timerEnds) {
+      stop();
+    }
+  }, [now, timerEnds, playing, stop]);
+
+  const play = useCallback(async () => {
+    const myToken = ++playTokenRef.current;
+    try {
+      setGenerating(selected);
+      const path = await ensureSampleFile(selected);
+      if (myToken !== playTokenRef.current) {
+        setGenerating(null);
+        return;
+      }
+      setGenerating(null);
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: path },
+        { shouldPlay: true, isLooping: true, volume: 1.0 },
+      );
+      if (myToken !== playTokenRef.current) {
+        // A newer call has superseded us — clean up the orphan and bail.
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+      soundRef.current = sound;
+      setPlaying(true);
+      if (timerMin > 0) setTimerEnds(Date.now() + timerMin * 60 * 1000);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    } catch (e) {
+      setGenerating(null);
+      console.warn('Play failed', e);
+    }
+  }, [selected, timerMin]);
+
   const swapTo = useCallback(
     async (k: SoundKind) => {
       setSelected(k);
       Haptics.selectionAsync().catch(() => {});
       if (!playing) return;
+      const myToken = ++playTokenRef.current;
       try {
         setGenerating(k);
         const path = await ensureSampleFile(k);
+        if (myToken !== playTokenRef.current) {
+          setGenerating(null);
+          return;
+        }
         setGenerating(null);
         if (soundRef.current) {
           await soundRef.current.unloadAsync();
@@ -234,6 +257,10 @@ export default function App() {
           { uri: path },
           { shouldPlay: true, isLooping: true, volume: 1.0 },
         );
+        if (myToken !== playTokenRef.current) {
+          await sound.unloadAsync().catch(() => {});
+          return;
+        }
         soundRef.current = sound;
       } catch (e) {
         setGenerating(null);
@@ -282,7 +309,7 @@ export default function App() {
               <Text style={styles.playBtnText}>{playing ? '■' : '▶'}</Text>
             )}
           </Pressable>
-          {timerEnds && playing && (
+          {timerEnds != null && playing && (
             <Text style={styles.remaining}>{remLabel}</Text>
           )}
         </View>
