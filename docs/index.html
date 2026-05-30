@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Quiet Room — Noise, made on your phone.</title>
-<meta name="description" content="White, pink, brown, rain — synthesized on-device on first launch, looped forever. No streaming, no audio files shipped, no ads between tracks." />
+<title>Quiet Room — White. Pink. Brown. Rain.</title>
+<meta name="description" content="Ambient noise for iPhone, generated on this device. No streaming, no audio files shipped, no ads between tracks, no account." />
 <meta name="theme-color" content="#0a1a1c" />
 <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="app.css" />
@@ -22,13 +22,13 @@
 
   <section class="hero" aria-labelledby="hero-title">
     <p class="hero-eyebrow"><span class="beta-badge">Now in beta · iOS via Expo Go</span></p>
-    <h1 id="hero-title">Noise, made on your phone.</h1>
-    <p class="lede">White, pink, brown, rain — synthesized on-device on first launch, looped forever. No streaming, no audio files shipped, no ads between tracks.</p>
+    <h1 id="hero-title">White. Pink. Brown. Rain.</h1>
+    <p class="lede">Ambient noise for iPhone, generated on this device. No streaming, no audio files shipped, no ads between tracks, no account.</p>
     <div class="cta-row">
       <a class="cta-primary" href="https://github.com/kiddkevin00/quietroom" rel="noopener" target="_blank">★ Star on GitHub</a>
       <a class="cta-secondary" href="#howtoplay">How it works →</a>
     </div>
-    <p class="trust-row"><span>No streaming</span><span>No license fees</span><span>Offline after first launch</span><span>Open source</span></p>
+    <p class="trust-row"><span>Offline-first</span><span>No ads</span><span>No streaming</span><span>Open source</span></p>
   </section>
 
   <section id="features" aria-labelledby="features-h">
@@ -36,12 +36,12 @@
     <h2 id="features-h">What's in the build</h2>
     <p class="subhead">The whole feature set, plainly listed — no upsells gating the basics.</p>
     <div class="feature-grid">
-      <article class="feature-card"><span class="feature-icon">◉</span><h3>White noise</h3><p>An even hiss across all frequencies — sharp, cuts conversation cleanly.</p></article>
-      <article class="feature-card"><span class="feature-icon">◍</span><h3>Pink noise</h3><p>Softer than white, lower energy at high frequencies — closer to leaves moving in wind.</p></article>
-      <article class="feature-card"><span class="feature-icon">◐</span><h3>Brown noise</h3><p>Deep, rumbling — like surf or a distant waterfall. Good for sleeping.</p></article>
-      <article class="feature-card"><span class="feature-icon">☂</span><h3>Rain</h3><p>Low-passed pink with scattered patter to approximate rainfall — steady, soothing.</p></article>
-      <article class="feature-card"><span class="feature-icon">☾</span><h3>Sleep timer</h3><p>15, 30, 45, 60, or 90 minutes. Audio stops cleanly when the timer expires.</p></article>
-      <article class="feature-card"><span class="feature-icon">⊘</span><h3>No network</h3><p>The audio is synthesized in JavaScript on first launch and cached locally. After that, playback is fully offline.</p></article>
+      <article class="feature-card"><span class="feature-icon">≋</span><h3>White noise</h3><p>Even hiss across all frequencies — the crisp 'old radio between stations' sound. Best for masking conversation.</p></article>
+      <article class="feature-card"><span class="feature-icon">❀</span><h3>Pink noise</h3><p>Softer, lower energy than white. Closer to leaves moving in wind. Studies suggest it helps with sleep.</p></article>
+      <article class="feature-card"><span class="feature-icon">❑</span><h3>Brown noise</h3><p>Deep, rumbling — like distant surf or a waterfall. Cuts through hard-edge city sound.</p></article>
+      <article class="feature-card"><span class="feature-icon">☂</span><h3>Rain</h3><p>Low-passed pink noise plus scattered impulses to suggest drops. Steady and soothing without being literal.</p></article>
+      <article class="feature-card"><span class="feature-icon">⏼</span><h3>Sleep timer</h3><p>Set 15 / 30 / 45 / 60 / 90 minutes; playback stops cleanly when it expires. Off disables it.</p></article>
+      <article class="feature-card"><span class="feature-icon">✦</span><h3>Generated, not streamed</h3><p>Sounds are synthesized in JavaScript on first play (Paul Kellett's pink filter, integrated Brownian for brown, low-passed pink + impulses for rain), cached as WAV files. Zero network.</p></article>
     </div>
   </section>
 
@@ -50,10 +50,11 @@
     <h2 id="howto-h">From cold-start to good-at-it</h2>
     <p class="subhead">A few short steps. The app gets out of your way after that.</p>
     <div class="steps-grid">
-      <article class="step-card"><span class="step-num">01</span><h3>Pick a sound</h3><p>Tap one of the four chips. The big label updates and a short description appears.</p></article>
-      <article class="step-card"><span class="step-num">02</span><h3>Tap the big play button</h3><p>First time on a given sound, the app synthesizes its WAV and caches it. After that, playback is instant.</p></article>
-      <article class="step-card"><span class="step-num">03</span><h3>Set a sleep timer (optional)</h3><p>Tap a length. The timer arms when you start playback and stops audio cleanly when it expires.</p></article>
-      <article class="step-card"><span class="step-num">04</span><h3>Plays through silent mode</h3><p>The app sets the iOS audio category so the sound plays even with your ringer switch off.</p></article>
+      <article class="step-card"><span class="step-num">01</span><h3>Pick a sound</h3><p>Tap one of the four chips at the bottom — White, Pink, Brown, Rain. The big label updates so you know what's queued.</p></article>
+      <article class="step-card"><span class="step-num">02</span><h3>Tap the big play button</h3><p>First play synthesizes the WAV (a second or two), then loops it. Subsequent plays start instantly because the file is cached.</p></article>
+      <article class="step-card"><span class="step-num">03</span><h3>Set a sleep timer (optional)</h3><p>Pick a duration in the Sleep timer row. With a timer set, playback stops automatically when it expires. Tap Off to disable.</p></article>
+      <article class="step-card"><span class="step-num">04</span><h3>Swap mid-play</h3><p>Tap a different sound chip while playing and the app loads the new sound — no manual stop/start needed.</p></article>
+      <article class="step-card"><span class="step-num">05</span><h3>Plays in silent mode</h3><p>The app sets the iOS audio category to playback. Lock-screen suspends audio (background audio requires native entitlements not in this Expo Go build).</p></article>
     </div>
   </section>
 
@@ -61,7 +62,7 @@
     <p class="eyebrow">Screenshots</p>
     <h2 id="shots-h">What it looks like on a phone</h2>
     <p class="subhead">Captured from the running app at iPhone 14 viewport.</p>
-    <div class="shots-empty">Screenshots from the running app are coming soon.</div>
+    <div class="shots-grid"><figure class="shot-card"><img src="screenshots/01-idle.png" alt="Pink selected with its tagline. Big play button waits; sleep timer Off by default. screenshot" loading="lazy" /><figcaption class="shot-caption"><span class="n">01</span><span>Pink selected with its tagline. Big play button waits; sleep timer Off by default.</span></figcaption></figure><figure class="shot-card"><img src="screenshots/02-brown.png" alt="Switched to Brown noise with a 30-minute sleep timer queued. The big label always reflects what's playing. screenshot" loading="lazy" /><figcaption class="shot-caption"><span class="n">02</span><span>Switched to Brown noise with a 30-minute sleep timer queued. The big label always reflects what's playing.</span></figcaption></figure></div>
   </section>
 
   <footer class="colophon">
