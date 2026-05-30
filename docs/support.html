@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quiet Room — Support</title>
+<meta name="description" content="Support and FAQ for Quiet Room." />
+<meta name="theme-color" content="#0a1a1c" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div class="page">
+  <header class="topnav">
+  <a class="brand" href="./" aria-label="Quiet Room home">
+    <span class="mark">QR</span>
+    Quiet Room
+    <span class="version">v1.0.0</span>
+  </a>
+  <nav class="nav-links" aria-label="Primary"><a href="#features">Features</a><a href="#howtoplay">How to play</a><a href="support.html" aria-current="page">Support</a><a href="privacy.html">Privacy</a><a href="https://github.com/kiddkevin00/quietroom" rel="noopener" target="_blank">GitHub</a></nav>
+</header>
+
+  <section class="hero" style="padding-bottom:32px">
+    <p class="eyebrow">Support</p>
+    <h1 style="margin-bottom:14px">Frequently asked, honestly answered.</h1>
+    <p class="lede">If your question isn't here, open an issue on GitHub. Public, traceable, and the same channel I use for everything else.</p>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="faq"><details><summary>Where do the sounds come from?</summary><p>They're synthesized in JavaScript on first launch using classic noise generators — Paul Kellett's pink filter, integrated Brownian motion for brown, low-passed pink + impulses for rain. The 10-second WAV files are cached to disk and looped via expo-av.</p></details><details><summary>Will it play with my phone on silent?</summary><p>Yes — the app sets the iOS audio category to play in silent mode.</p></details><details><summary>Will it keep playing if I lock the screen?</summary><p>Background audio requires a native entitlement that isn't enabled in this Expo Go build. Locking the screen suspends playback. The screen is kept awake while the app is open and playing.</p></details><details><summary>Why no nature recordings, ocean, forest?</summary><p>Those need licensed audio files. Quiet Room ships zero audio assets on purpose — everything is synthesized. Recorded-sound packs are on the roadmap once we have a native build.</p></details></div>
+  </section>
+
+  <aside class="contact-card">
+    <p class="eyebrow">Get in touch</p>
+    <h3>Need help, or want to report a bug?</h3>
+    <p>Open an issue on GitHub. There's no support email — issues are the canonical channel and they're public, which keeps everything honest.</p>
+    <a href="https://github.com/kiddkevin00/quietroom/issues" rel="noopener" target="_blank">github.com/kiddkevin00/quietroom/issues</a>
+  </aside>
+
+  <footer class="colophon">
+  <span class="credit">© Mark Utility Labs · Made with care.</span>
+  <nav class="colophon-links" aria-label="Footer">
+    <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="https://github.com/kiddkevin00/quietroom" rel="noopener" target="_blank">GitHub</a>
+  </nav>
+</footer>
+</div>
+</body>
+</html>
