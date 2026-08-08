@@ -44,7 +44,7 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string }[] = [
 
 const SAMPLE_RATE = 44100;
 const DURATION_SEC = 10;
-const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples/`;
+const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v2/`;
 
 const TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
 const DEFAULT_VOLUME = 0.7;
@@ -109,94 +109,132 @@ function whiteGenerator() {
   return () => Math.random() * 2 - 1;
 }
 
-// Rain approximation: low-passed pink noise + scattered impulses.
+// Rain: bright hiss (mild low-pass only, keeps high-frequency "patter"
+// character instead of collapsing into a bassy rumble) plus frequent
+// short droplet ticks.
 function rainGenerator() {
-  const pink = pinkGenerator();
-  let lp = 0;
+  const white = whiteGenerator();
+  let hp = 0;
+  let lastW = 0;
+  let dropEnv = 0;
   return () => {
-    const base = pink();
-    lp = lp * 0.96 + base * 0.04;
-    let drop = 0;
-    if (Math.random() < 0.0025) drop = (Math.random() * 2 - 1) * 0.6;
-    return lp * 4.2 + drop;
+    const w = white();
+    hp = hp * 0.7 + (w - lastW) * 0.7;
+    lastW = w;
+    if (dropEnv <= 0.002 && Math.random() < 0.006) {
+      dropEnv = 0.5 + Math.random() * 0.5;
+    }
+    const drop = dropEnv * (Math.random() * 2 - 1);
+    dropEnv *= 0.7;
+    return hp * 1.6 + drop * 0.9;
   };
 }
 
-// Ocean: slow-breathing swell over low-passed pink noise.
+// Ocean: pink-noise wash with a pronounced, fast-enough swell that two
+// full rise-and-fall waves are audible inside a single 10s loop, plus an
+// occasional foamy hiss burst as a wave crests.
 function oceanGenerator() {
   const pink = pinkGenerator();
   let lp = 0;
   let t = 0;
+  let foamEnv = 0;
   return () => {
     const base = pink();
-    lp = lp * 0.97 + base * 0.03;
+    lp = lp * 0.9 + base * 0.1;
     t += 1;
-    const swell = 0.6 + 0.4 * Math.sin((t / SAMPLE_RATE) * 2 * Math.PI * 0.09);
-    return lp * 3.8 * swell;
+    const phase = (t / SAMPLE_RATE) * 2 * Math.PI * 0.2;
+    const swell = 0.35 + 0.65 * Math.pow((1 + Math.sin(phase)) / 2, 1.5);
+    if (foamEnv <= 0.001 && swell > 0.85 && Math.random() < 0.002) {
+      foamEnv = 0.6;
+    }
+    const foam = foamEnv * (Math.random() * 2 - 1);
+    foamEnv *= 0.9996;
+    return lp * 4.5 * swell + foam;
   };
 }
 
-// Wind: gusting brown noise with a slow amplitude LFO plus a thin hiss layer.
+// Wind: brown-noise gusts with a clearly audible rise-and-fall (multiple
+// gusts per loop) plus a whistling higher-frequency hiss that swells with it.
 function windGenerator() {
   const brown = brownGenerator();
+  const white = whiteGenerator();
   let t = 0;
   return () => {
     const base = brown();
     t += 1;
-    const gust = 0.55 + 0.45 * Math.sin((t / SAMPLE_RATE) * 2 * Math.PI * 0.05 + Math.sin((t / SAMPLE_RATE) * 0.3));
-    const hiss = (Math.random() * 2 - 1) * 0.15;
-    return base * gust + hiss * gust;
+    const sec = t / SAMPLE_RATE;
+    const gust = 0.4 + 0.6 * Math.pow((1 + Math.sin(sec * 2 * Math.PI * 0.22)) / 2, 2);
+    const hiss = white() * 0.35 * gust;
+    return base * (0.5 + gust) + hiss;
   };
 }
 
-// Campfire: pink noise bed with frequent sharp decaying pops.
+// Campfire: near-constant crackle-and-pop over a warm low rumble bed.
 function campfireGenerator() {
   const pink = pinkGenerator();
+  const brown = brownGenerator();
   let popEnv = 0;
   return () => {
-    const base = pink() * 0.7;
-    if (popEnv <= 0.001 && Math.random() < 0.02) {
-      popEnv = 0.5 + Math.random() * 0.5;
+    const base = pink() * 0.45 + brown() * 0.35;
+    if (popEnv <= 0.002 && Math.random() < 0.06) {
+      popEnv = 0.6 + Math.random() * 0.6;
     }
     const pop = popEnv * (Math.random() * 2 - 1);
-    popEnv *= 0.85;
+    popEnv *= 0.8;
     return base + pop;
   };
 }
 
-// Thunder: rain bed with rare, slow sub-bass rumbles.
+// Thunder: a slow, irregular rolling sub-bass rumble (built from several
+// overlapping low-frequency oscillators so it swells unevenly rather than
+// pulsing on a fixed beat) with occasional deeper booms — distinct from
+// wind's gusting and rain's patter.
 function thunderGenerator() {
-  const rain = rainGenerator();
-  let rumble = 0;
   let lp = 0;
+  let texture = 0;
+  let t = 0;
+  let boom = 0;
   return () => {
-    const base = rain() * 0.5;
-    if (rumble <= 0.002 && Math.random() < 0.0003) {
-      rumble = 0.8 + Math.random() * 0.2;
-    }
+    t += 1;
+    const sec = t / SAMPLE_RATE;
     const w = Math.random() * 2 - 1;
-    lp = lp * 0.995 + w * 0.005;
-    const boom = lp * rumble * 6;
-    rumble *= 0.9995;
-    return base + boom;
+    lp = lp * 0.997 + w * 0.003;
+    // A softer, mid-passed noise floor well below the rumble in level —
+    // present enough to avoid dead silence, quiet enough to stay a bass sound.
+    texture = texture * 0.9 + w * 0.1;
+    const roll =
+      0.5 +
+      0.3 * Math.sin(sec * 2 * Math.PI * 0.07) +
+      0.2 * Math.sin(sec * 2 * Math.PI * 0.13 + 1.4);
+    if (boom <= 0.002 && Math.random() < 0.0006) {
+      boom = 0.7 + Math.random() * 0.3;
+    }
+    boom *= 0.9992;
+    const rumble = lp * 9 * Math.max(0.15, roll) + lp * boom * 5;
+    return rumble + texture * 0.06;
   };
 }
 
-// Fan: steady low-frequency motor hum plus filtered white noise.
+// Fan: a steady, clearly tonal motor hum (fundamental + harmonic) sitting
+// under a constant filtered-noise wash — reads as a mechanical box fan
+// rather than plain hiss.
 function fanGenerator() {
   let phase = 0;
-  const white = whiteGenerator();
+  let lp = 0;
   return () => {
     phase += 1;
     const hum =
-      Math.sin((2 * Math.PI * 100 * phase) / SAMPLE_RATE) * 0.25 +
-      Math.sin((2 * Math.PI * 200 * phase) / SAMPLE_RATE) * 0.08;
-    const noise = white() * 0.5;
-    return hum + noise;
+      Math.sin((2 * Math.PI * 120 * phase) / SAMPLE_RATE) * 0.32 +
+      Math.sin((2 * Math.PI * 240 * phase) / SAMPLE_RATE) * 0.14 +
+      Math.sin((2 * Math.PI * 60 * phase) / SAMPLE_RATE) * 0.1;
+    const w = Math.random() * 2 - 1;
+    lp = lp * 0.6 + w * 0.4;
+    return hum + lp * 0.55;
   };
 }
 
-// Crickets: quiet pink-noise night floor with periodic chirps.
+// Crickets: a hushed, near-silent night floor punctuated by sharp, clearly
+// audible double-pulse chirps (the two-beat rhythm real crickets make).
 function cricketsGenerator() {
   const pink = pinkGenerator();
   let lp = 0;
@@ -205,14 +243,18 @@ function cricketsGenerator() {
     t += 1;
     const floor = pink();
     lp = lp * 0.9 + floor * 0.1;
-    const cycleLen = Math.round(SAMPLE_RATE * 0.5);
+    const cycleLen = Math.round(SAMPLE_RATE * 0.6);
     const cyclePos = (t % cycleLen) / SAMPLE_RATE;
     let chirp = 0;
-    if (cyclePos < 0.08) {
-      const env = Math.sin(Math.PI * (cyclePos / 0.08));
-      chirp = Math.sin((2 * Math.PI * 3200 * t) / SAMPLE_RATE) * env * 0.5;
+    const pulses = [0, 0.09];
+    for (const start of pulses) {
+      const dt = cyclePos - start;
+      if (dt >= 0 && dt < 0.06) {
+        const env = Math.sin(Math.PI * (dt / 0.06));
+        chirp += Math.sin((2 * Math.PI * 4200 * t) / SAMPLE_RATE) * env * 0.9;
+      }
     }
-    return lp * 0.6 + chirp;
+    return lp * 0.25 + chirp;
   };
 }
 
@@ -498,7 +540,9 @@ export default function App() {
               {busyCount > 0 ? (
                 <ActivityIndicator color="#fff" size="large" />
               ) : (
-                <Text style={styles.playBtnText}>{playing ? '■' : '▶'}</Text>
+                <Text style={[styles.playBtnText, playing && styles.playBtnTextPlaying]}>
+                  {playing ? '■' : '▶'}
+                </Text>
               )}
             </Pressable>
             {timerEnds != null && playing && (
@@ -618,6 +662,7 @@ const styles = StyleSheet.create({
   },
   playBtnPlaying: { backgroundColor: '#4d8a8a', borderColor: '#4d8a8a' },
   playBtnText: { color: '#e2eced', fontSize: 42, lineHeight: 44, marginLeft: 6 },
+  playBtnTextPlaying: { marginLeft: 0 },
   remaining: { marginTop: 18, color: '#7a9090', fontSize: 20, fontVariant: ['tabular-nums'], letterSpacing: 1 },
 
   bottom: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 28 },
