@@ -11,7 +11,7 @@
       "bundleIdentifier": "com.markutilitylabs.quietroom",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": []
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
