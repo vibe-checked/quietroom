@@ -30,12 +30,19 @@ type SoundKind =
   | 'towerfan'
   | 'ceilingfan'
   | 'acunit'
+  | 'largefloorfan'
+  | 'smalldeskfan'
   | 'crickets'
   | 'binaural_delta'
   | 'binaural_theta'
-  | 'binaural_alpha';
+  | 'binaural_alpha'
+  | 'music_soothe'
+  | 'music_deepsleep'
+  | 'music_ultrarelax'
+  | 'music_healingcalm';
 
 const BINAURAL_KINDS: SoundKind[] = ['binaural_delta', 'binaural_theta', 'binaural_alpha'];
+const MUSIC_KINDS: SoundKind[] = ['music_soothe', 'music_deepsleep', 'music_ultrarelax', 'music_healingcalm'];
 
 const SOUNDS: { kind: SoundKind; label: string; tagline: string }[] = [
   { kind: 'white', label: 'White', tagline: 'Crisp, even hiss — like an old radio tuned between stations.' },
@@ -50,10 +57,16 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string }[] = [
   { kind: 'towerfan', label: 'Tower Fan', tagline: 'Smoother, airier whoosh — less motor, more breeze.' },
   { kind: 'ceilingfan', label: 'Ceiling Fan', tagline: 'Deep, slow-turning hum with a gentle blade flutter.' },
   { kind: 'acunit', label: 'Window AC', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.' },
+  { kind: 'largefloorfan', label: 'Large Floor Fan', tagline: 'A big standing fan — deep, powerful, moving a lot of air.' },
+  { kind: 'smalldeskfan', label: 'Small Desk Fan', tagline: 'A small, higher-pitched motor whir close by.' },
   { kind: 'crickets', label: 'Night', tagline: 'Quiet dark with a chorus of distant crickets.' },
-  { kind: 'binaural_delta', label: 'Deep Sleep', tagline: 'Binaural delta tone (2Hz) — wear headphones for the effect.' },
-  { kind: 'binaural_theta', label: 'Relaxation', tagline: 'Binaural theta tone (6Hz) — wear headphones for the effect.' },
-  { kind: 'binaural_alpha', label: 'Calm Focus', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.' },
+  { kind: 'music_soothe', label: 'Soothe', tagline: 'A soft, warm pad — gentle and unhurried.' },
+  { kind: 'music_deepsleep', label: 'Deep Sleep', tagline: 'Low, slow-moving tones for drifting off.' },
+  { kind: 'music_ultrarelax', label: 'Ultra Relax', tagline: 'A brighter, shimmering pad with a light touch.' },
+  { kind: 'music_healingcalm', label: 'Healing Calm', tagline: 'A warm, slowly breathing drone.' },
+  { kind: 'binaural_delta', label: 'Binaural Delta', tagline: 'Binaural delta tone (2Hz) — wear headphones for the effect.' },
+  { kind: 'binaural_theta', label: 'Binaural Theta', tagline: 'Binaural theta tone (6Hz) — wear headphones for the effect.' },
+  { kind: 'binaural_alpha', label: 'Binaural Alpha', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.' },
 ];
 
 const SAMPLE_RATE = 44100;
@@ -356,6 +369,39 @@ function acUnitGenerator() {
   };
 }
 
+// Large floor fan: a big standing fan — deeper and fuller than a box fan,
+// with more moving-air whoosh behind a lower motor tone.
+function largeFloorFanGenerator() {
+  let phase = 0;
+  let lp = 0;
+  return () => {
+    phase += 1;
+    const hum =
+      Math.sin((2 * Math.PI * 80 * phase) / SAMPLE_RATE) * 0.3 +
+      Math.sin((2 * Math.PI * 160 * phase) / SAMPLE_RATE) * 0.1;
+    const w = Math.random() * 2 - 1;
+    lp = lp * 0.82 + w * 0.18;
+    return hum + lp * 0.75;
+  };
+}
+
+// Small desk fan: a small motor close by — higher-pitched and thinner,
+// with a faint buzzy edge instead of a full hum.
+function smallDeskFanGenerator() {
+  let phase = 0;
+  let lp = 0;
+  return () => {
+    phase += 1;
+    const hum =
+      Math.sin((2 * Math.PI * 260 * phase) / SAMPLE_RATE) * 0.16 +
+      Math.sin((2 * Math.PI * 520 * phase) / SAMPLE_RATE) * 0.07 +
+      Math.sin((2 * Math.PI * 40 * phase) / SAMPLE_RATE) * 0.08;
+    const w = Math.random() * 2 - 1;
+    lp = lp * 0.5 + w * 0.5;
+    return hum + lp * 0.4;
+  };
+}
+
 // Crickets: a hushed, near-silent night floor punctuated by sharp, clearly
 // audible double-pulse chirps (the two-beat rhythm real crickets make).
 function cricketsGenerator() {
@@ -400,6 +446,33 @@ function binauralPair(carrierHz: number, beatHz: number) {
   return { left, right };
 }
 
+// Ambient pad: a handful of detuned sine tones held as a slow chord, each
+// with a faint independent vibrato, under a shared slow tremolo and a
+// whisper of pink noise for warmth — a generated stand-in for the soft
+// instrumental "sleep music" tracks other apps license.
+function padGenerator(freqs: number[], speed: number, warmth: number) {
+  const phases = freqs.map(() => 0);
+  const vibPhases = freqs.map((_, i) => i * 1.3);
+  const pink = pinkGenerator();
+  let lp = 0;
+  let t = 0;
+  return () => {
+    t += 1;
+    const sec = t / SAMPLE_RATE;
+    let sum = 0;
+    for (let i = 0; i < freqs.length; i++) {
+      const vib = 1 + 0.003 * Math.sin(sec * 2 * Math.PI * 0.07 * speed + vibPhases[i]);
+      phases[i] += (2 * Math.PI * freqs[i] * vib) / SAMPLE_RATE;
+      sum += Math.sin(phases[i]);
+    }
+    sum /= freqs.length;
+    const tremolo = 0.75 + 0.25 * Math.sin(sec * 2 * Math.PI * 0.05 * speed);
+    const n = pink();
+    lp = lp * 0.95 + n * 0.05;
+    return sum * 0.5 * tremolo + lp * warmth;
+  };
+}
+
 function makeGenerator(kind: SoundKind) {
   switch (kind) {
     case 'white': return whiteGenerator();
@@ -414,7 +487,13 @@ function makeGenerator(kind: SoundKind) {
     case 'towerfan': return towerFanGenerator();
     case 'ceilingfan': return ceilingFanGenerator();
     case 'acunit': return acUnitGenerator();
+    case 'largefloorfan': return largeFloorFanGenerator();
+    case 'smalldeskfan': return smallDeskFanGenerator();
     case 'crickets': return cricketsGenerator();
+    case 'music_soothe': return padGenerator([130.81, 164.81, 196.0], 1, 0.05);
+    case 'music_deepsleep': return padGenerator([98.0, 123.47, 146.83], 0.5, 0.08);
+    case 'music_ultrarelax': return padGenerator([196.0, 246.94, 293.66, 392.0], 1.3, 0.03);
+    case 'music_healingcalm': return padGenerator([110.0, 138.59, 164.81], 0.35, 0.09);
     default:
       throw new Error(`${kind} is a stereo binaural kind — use binauralPair instead`);
   }
