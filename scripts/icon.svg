@@ -1,0 +1,27 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="512" cy="389" r="768">
+      <stop offset="0%" stop-color="#1a2c30"/>
+      <stop offset="55%" stop-color="#101c20"/>
+      <stop offset="100%" stop-color="#080f11"/>
+    </radialGradient>
+    <linearGradient id="moon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d9ecec"/>
+      <stop offset="45%" stop-color="#9fc7c7"/>
+      <stop offset="100%" stop-color="#4d8a8a"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- sound ripples -->
+  <g fill="none" stroke="#4d8a8a">
+    <circle cx="512" cy="470" r="330" stroke-opacity="0.16" stroke-width="10"/>
+    <circle cx="512" cy="470" r="400" stroke-opacity="0.10" stroke-width="9"/>
+    <circle cx="512" cy="470" r="468" stroke-opacity="0.06" stroke-width="8"/>
+  </g>
+
+  <!-- crescent moon: base disc + same-background eraser disc offset up-right -->
+  <circle cx="512" cy="460" r="196" fill="url(#moon)"/>
+  <circle cx="586" cy="392" r="178" fill="url(#bg)"/>
+</svg>
