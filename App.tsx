@@ -26,8 +26,16 @@ type SoundKind =
   | 'wind'
   | 'campfire'
   | 'thunder'
-  | 'fan'
-  | 'crickets';
+  | 'boxfan'
+  | 'towerfan'
+  | 'ceilingfan'
+  | 'acunit'
+  | 'crickets'
+  | 'binaural_delta'
+  | 'binaural_theta'
+  | 'binaural_alpha';
+
+const BINAURAL_KINDS: SoundKind[] = ['binaural_delta', 'binaural_theta', 'binaural_alpha'];
 
 const SOUNDS: { kind: SoundKind; label: string; tagline: string }[] = [
   { kind: 'white', label: 'White', tagline: 'Crisp, even hiss — like an old radio tuned between stations.' },
@@ -38,13 +46,24 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string }[] = [
   { kind: 'wind', label: 'Wind', tagline: 'Gusting air moving through open space.' },
   { kind: 'campfire', label: 'Campfire', tagline: 'Warm crackle and pop of a low fire.' },
   { kind: 'thunder', label: 'Thunder', tagline: 'Distant rolling rumble beneath a steady rain.' },
-  { kind: 'fan', label: 'Fan', tagline: 'A steady motor hum — the classic white-noise machine.' },
+  { kind: 'boxfan', label: 'Box Fan', tagline: 'The classic bedroom box fan — steady hum and moving air.' },
+  { kind: 'towerfan', label: 'Tower Fan', tagline: 'Smoother, airier whoosh — less motor, more breeze.' },
+  { kind: 'ceilingfan', label: 'Ceiling Fan', tagline: 'Deep, slow-turning hum with a gentle blade flutter.' },
+  { kind: 'acunit', label: 'Window AC', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.' },
   { kind: 'crickets', label: 'Night', tagline: 'Quiet dark with a chorus of distant crickets.' },
+  { kind: 'binaural_delta', label: 'Deep Sleep', tagline: 'Binaural delta tone (2Hz) — wear headphones for the effect.' },
+  { kind: 'binaural_theta', label: 'Relaxation', tagline: 'Binaural theta tone (6Hz) — wear headphones for the effect.' },
+  { kind: 'binaural_alpha', label: 'Calm Focus', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.' },
 ];
 
 const SAMPLE_RATE = 44100;
-const DURATION_SEC = 10;
-const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v2/`;
+// Longer loops repeat less obviously — thunder booms, campfire pops, and
+// ocean swells no longer land on the exact same beat every few seconds.
+const DURATION_SEC = 24;
+// Samples of overlap crossfaded between the tail and head so the loop point
+// is inaudible instead of clicking on every repeat.
+const LOOP_CROSSFADE_SEC = 0.75;
+const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v3/`;
 
 const TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
 const DEFAULT_VOLUME = 0.7;
@@ -55,8 +74,33 @@ function writeStr(view: DataView, off: number, s: string) {
   for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
 }
 
+// Smooth saturation instead of a hard clamp — generators occasionally peak
+// past +-1 by design (pops, booms), and hard-clamping those turns them into
+// harsh digital clipping. tanh rounds the peaks off instead.
+function softClip(x: number): number {
+  return Math.tanh(x);
+}
+
+// Renders `n` + one crossfade window of continuous samples, then blends the
+// crossfade window (tail-continuation into head) so sample[0] picks up
+// smoothly from sample[n-1] when the buffer loops — eliminates the seam
+// click that a naive loop of raw generator output would have.
+function renderLoopable(n: number, cf: number, sampleFn: () => number): Float64Array {
+  const raw = new Float64Array(n + cf);
+  for (let i = 0; i < n + cf; i++) raw[i] = sampleFn();
+  const out = new Float64Array(n);
+  for (let i = cf; i < n; i++) out[i] = raw[i];
+  for (let i = 0; i < cf; i++) {
+    const t = i / cf;
+    out[i] = raw[i] * t + raw[n + i] * (1 - t);
+  }
+  return out;
+}
+
 function genWav(sampleFn: () => number): Uint8Array {
   const n = SAMPLE_RATE * DURATION_SEC;
+  const cf = Math.round(SAMPLE_RATE * LOOP_CROSSFADE_SEC);
+  const samples = renderLoopable(n, cf, sampleFn);
   const buf = new ArrayBuffer(44 + n * 2);
   const v = new DataView(buf);
   writeStr(v, 0, 'RIFF');
@@ -73,8 +117,37 @@ function genWav(sampleFn: () => number): Uint8Array {
   writeStr(v, 36, 'data');
   v.setUint32(40, n * 2, true);
   for (let i = 0; i < n; i++) {
-    const s = Math.max(-1, Math.min(1, sampleFn()));
+    const s = softClip(samples[i]);
     v.setInt16(44 + i * 2, Math.round(s * 32767), true);
+  }
+  return new Uint8Array(buf);
+}
+
+function genWavStereo(leftFn: () => number, rightFn: () => number): Uint8Array {
+  const n = SAMPLE_RATE * DURATION_SEC;
+  const cf = Math.round(SAMPLE_RATE * LOOP_CROSSFADE_SEC);
+  const left = renderLoopable(n, cf, leftFn);
+  const right = renderLoopable(n, cf, rightFn);
+  const buf = new ArrayBuffer(44 + n * 4);
+  const v = new DataView(buf);
+  writeStr(v, 0, 'RIFF');
+  v.setUint32(4, 36 + n * 4, true);
+  writeStr(v, 8, 'WAVE');
+  writeStr(v, 12, 'fmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 2, true);
+  v.setUint32(24, SAMPLE_RATE, true);
+  v.setUint32(28, SAMPLE_RATE * 4, true);
+  v.setUint16(32, 4, true);
+  v.setUint16(34, 16, true);
+  writeStr(v, 36, 'data');
+  v.setUint32(40, n * 4, true);
+  for (let i = 0; i < n; i++) {
+    const l = softClip(left[i]);
+    const r = softClip(right[i]);
+    v.setInt16(44 + i * 4, Math.round(l * 32767), true);
+    v.setInt16(44 + i * 4 + 2, Math.round(r * 32767), true);
   }
   return new Uint8Array(buf);
 }
@@ -215,10 +288,9 @@ function thunderGenerator() {
   };
 }
 
-// Fan: a steady, clearly tonal motor hum (fundamental + harmonic) sitting
-// under a constant filtered-noise wash — reads as a mechanical box fan
-// rather than plain hiss.
-function fanGenerator() {
+// Box fan: a steady, clearly tonal motor hum (fundamental + harmonic)
+// sitting under a constant filtered-noise wash — the classic bedroom fan.
+function boxFanGenerator() {
   let phase = 0;
   let lp = 0;
   return () => {
@@ -230,6 +302,57 @@ function fanGenerator() {
     const w = Math.random() * 2 - 1;
     lp = lp * 0.6 + w * 0.4;
     return hum + lp * 0.55;
+  };
+}
+
+// Tower fan: airier and smoother — mostly moving-air hiss with only a
+// faint high, quiet hum instead of a heavy motor tone.
+function towerFanGenerator() {
+  let phase = 0;
+  let lp = 0;
+  return () => {
+    phase += 1;
+    const hum = Math.sin((2 * Math.PI * 180 * phase) / SAMPLE_RATE) * 0.12;
+    const w = Math.random() * 2 - 1;
+    lp = lp * 0.75 + w * 0.25;
+    return hum + lp * 0.8;
+  };
+}
+
+// Ceiling fan: a deep, slow motor with a gentle rhythmic flutter from the
+// blades passing overhead.
+function ceilingFanGenerator() {
+  let phase = 0;
+  let lp = 0;
+  let t = 0;
+  return () => {
+    phase += 1;
+    t += 1;
+    const flutter = 0.85 + 0.15 * Math.sin((t / SAMPLE_RATE) * 2 * Math.PI * 3.2);
+    const hum =
+      (Math.sin((2 * Math.PI * 55 * phase) / SAMPLE_RATE) * 0.34 +
+        Math.sin((2 * Math.PI * 110 * phase) / SAMPLE_RATE) * 0.1) *
+      flutter;
+    const w = Math.random() * 2 - 1;
+    lp = lp * 0.65 + w * 0.35;
+    return hum + lp * 0.35 * flutter;
+  };
+}
+
+// Window AC unit: a lower, slightly beating compressor drone with more
+// broadband hiss — reads as rattly/mechanical rather than a clean fan hum.
+function acUnitGenerator() {
+  let phase = 0;
+  let lp = 0;
+  return () => {
+    phase += 1;
+    const hum =
+      Math.sin((2 * Math.PI * 45 * phase) / SAMPLE_RATE) * 0.28 +
+      Math.sin((2 * Math.PI * 91 * phase) / SAMPLE_RATE) * 0.16 +
+      Math.sin((2 * Math.PI * 136 * phase) / SAMPLE_RATE) * 0.08;
+    const w = Math.random() * 2 - 1;
+    lp = lp * 0.55 + w * 0.45;
+    return hum + lp * 0.65;
   };
 }
 
@@ -258,6 +381,25 @@ function cricketsGenerator() {
   };
 }
 
+// Binaural beat: a pure carrier tone in each ear, offset by `beatHz` — the
+// brain perceives the difference as a slow pulsing beat. Needs headphones
+// to work; a faint pink-noise floor takes the edge off the pure tones.
+function binauralPair(carrierHz: number, beatHz: number) {
+  const pinkL = pinkGenerator();
+  const pinkR = pinkGenerator();
+  let phaseL = 0;
+  let phaseR = 0;
+  const left = () => {
+    phaseL += 1;
+    return Math.sin((2 * Math.PI * carrierHz * phaseL) / SAMPLE_RATE) * 0.35 + pinkL() * 0.04;
+  };
+  const right = () => {
+    phaseR += 1;
+    return Math.sin((2 * Math.PI * (carrierHz + beatHz) * phaseR) / SAMPLE_RATE) * 0.35 + pinkR() * 0.04;
+  };
+  return { left, right };
+}
+
 function makeGenerator(kind: SoundKind) {
   switch (kind) {
     case 'white': return whiteGenerator();
@@ -268,8 +410,23 @@ function makeGenerator(kind: SoundKind) {
     case 'wind': return windGenerator();
     case 'campfire': return campfireGenerator();
     case 'thunder': return thunderGenerator();
-    case 'fan': return fanGenerator();
+    case 'boxfan': return boxFanGenerator();
+    case 'towerfan': return towerFanGenerator();
+    case 'ceilingfan': return ceilingFanGenerator();
+    case 'acunit': return acUnitGenerator();
     case 'crickets': return cricketsGenerator();
+    default:
+      throw new Error(`${kind} is a stereo binaural kind — use binauralPair instead`);
+  }
+}
+
+function makeBinauralPair(kind: SoundKind) {
+  switch (kind) {
+    case 'binaural_delta': return binauralPair(200, 2);
+    case 'binaural_theta': return binauralPair(210, 6);
+    case 'binaural_alpha': return binauralPair(220, 10);
+    default:
+      throw new Error(`${kind} is not a binaural kind`);
   }
 }
 
@@ -291,7 +448,12 @@ async function ensureSampleFile(kind: SoundKind): Promise<string> {
   const info = await FileSystem.getInfoAsync(path);
   if (info.exists) return path;
   await FileSystem.makeDirectoryAsync(SAMPLES_DIR, { intermediates: true });
-  const wav = genWav(makeGenerator(kind));
+  const wav = BINAURAL_KINDS.includes(kind)
+    ? (() => {
+        const { left, right } = makeBinauralPair(kind);
+        return genWavStereo(left, right);
+      })()
+    : genWav(makeGenerator(kind));
   const b64 = uint8ToBase64(wav);
   await FileSystem.writeAsStringAsync(path, b64, { encoding: FileSystem.EncodingType.Base64 });
   return path;
@@ -352,10 +514,36 @@ export default function App() {
     return () => clearInterval(id);
   }, [timerEnds]);
 
+  const STOP_FADE_MS = 700;
+  const STOP_FADE_STEPS = 10;
+
   const stop = useCallback(async () => {
     genTokenRef.current += 1;
     const entries = Array.from(soundsRef.current.entries());
     soundsRef.current.clear();
+    setBusyCount((c) => c + 1);
+
+    // Fade every active track down to silence before actually stopping —
+    // makes even a manual stop feel gentle instead of an abrupt cutoff.
+    const startVols = new Map<string, number>();
+    await Promise.all(
+      entries.map(async ([k, s]) => {
+        try {
+          const status = await s.getStatusAsync();
+          startVols.set(k, status.isLoaded ? status.volume ?? 0 : mix[k] ?? DEFAULT_VOLUME);
+        } catch {
+          startVols.set(k, mix[k] ?? DEFAULT_VOLUME);
+        }
+      }),
+    );
+    for (let step = 1; step <= STOP_FADE_STEPS; step++) {
+      const factor = 1 - step / STOP_FADE_STEPS;
+      await Promise.all(
+        entries.map(([k, s]) => s.setVolumeAsync((startVols.get(k) ?? 0) * factor).catch(() => {})),
+      );
+      await new Promise((r) => setTimeout(r, STOP_FADE_MS / STOP_FADE_STEPS));
+    }
+
     await Promise.all(
       entries.map(([, s]) =>
         s
@@ -366,9 +554,9 @@ export default function App() {
     );
     setPlaying(false);
     setTimerEnds(null);
-    setBusyCount(0);
+    setBusyCount((c) => Math.max(0, c - 1));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  }, []);
+  }, [mix]);
 
   // Auto fade-out + stop on timer expiry
   useEffect(() => {
@@ -400,13 +588,19 @@ export default function App() {
       if (genTokenRef.current !== myToken) return;
       const { sound } = await Audio.Sound.createAsync(
         { uri: path },
-        { shouldPlay: true, isLooping: true, volume: vol },
+        { shouldPlay: true, isLooping: true, volume: 0 },
       );
       if (genTokenRef.current !== myToken) {
         await sound.unloadAsync().catch(() => {});
         return;
       }
       soundsRef.current.set(k, sound);
+      const steps = 8;
+      for (let step = 1; step <= steps; step++) {
+        if (genTokenRef.current !== myToken) return;
+        await sound.setVolumeAsync((vol * step) / steps).catch(() => {});
+        await new Promise((r) => setTimeout(r, 400 / steps));
+      }
     } catch (e) {
       console.warn('Track failed', k, e);
     } finally {
@@ -530,6 +724,9 @@ export default function App() {
             <Pressable
               onPress={playing ? stop : () => play()}
               disabled={busyCount > 0 || !activeSounds.length}
+              accessibilityRole="button"
+              accessibilityLabel={playing ? 'Stop playback' : 'Start playback'}
+              accessibilityState={{ disabled: busyCount > 0 || !activeSounds.length, busy: busyCount > 0 }}
               style={({ pressed }) => [
                 styles.playBtn,
                 playing && styles.playBtnPlaying,
@@ -561,6 +758,10 @@ export default function App() {
                 <Pressable
                   key={s.kind}
                   onPress={() => toggleSound(s.kind)}
+                  accessibilityRole="switch"
+                  accessibilityLabel={s.label}
+                  accessibilityHint={s.tagline}
+                  accessibilityState={{ checked: active }}
                   style={({ pressed }) => [
                     styles.tile,
                     active && styles.tileActive,
@@ -578,6 +779,7 @@ export default function App() {
                       maximumTrackTintColor="rgba(13,21,24,0.35)"
                       thumbTintColor="#0d1518"
                       onValueChange={(v) => adjustVolume(s.kind, v)}
+                      accessibilityLabel={`${s.label} volume`}
                     />
                   )}
                 </Pressable>
@@ -596,6 +798,9 @@ export default function App() {
                   if (playing && m > 0) setTimerEnds(Date.now() + m * 60 * 1000);
                   else if (m === 0) setTimerEnds(null);
                 }}
+                accessibilityRole="radio"
+                accessibilityLabel={m === 0 ? 'No sleep timer' : `Sleep timer, ${m} minutes`}
+                accessibilityState={{ checked: timerMin === m }}
                 style={({ pressed }) => [
                   styles.chip,
                   styles.timerChip,
@@ -612,7 +817,7 @@ export default function App() {
 
           <View style={styles.presetHeaderRow}>
             <Text style={styles.sectionLabel}>Saved mixes</Text>
-            <Pressable onPress={savePreset} hitSlop={8}>
+            <Pressable onPress={savePreset} hitSlop={8} accessibilityRole="button" accessibilityLabel="Save current mix">
               <Text style={styles.saveLink}>+ Save current</Text>
             </Pressable>
           </View>
@@ -623,6 +828,9 @@ export default function App() {
                   key={p.id}
                   onPress={() => loadPreset(p)}
                   onLongPress={() => deletePreset(p)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Load mix: ${p.name}`}
+                  accessibilityHint="Double tap and hold to delete"
                   style={({ pressed }) => [styles.chip, pressed && { opacity: 0.85 }]}
                 >
                   <Text style={styles.chipText}>{p.name}</Text>
