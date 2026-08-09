@@ -84,7 +84,7 @@ const DURATION_SEC = 24;
 // Samples of overlap crossfaded between the tail and head so the loop point
 // is inaudible instead of clicking on every repeat.
 const LOOP_CROSSFADE_SEC = 0.75;
-const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v3/`;
+const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v4/`;
 
 const TIMER_OPTIONS = [0, 30, 60, 120];
 
@@ -106,11 +106,20 @@ function writeStr(view: DataView, off: number, s: string) {
   for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
 }
 
-// Smooth saturation instead of a hard clamp — generators occasionally peak
-// past +-1 by design (pops, booms), and hard-clamping those turns them into
-// harsh digital clipping. tanh rounds the peaks off instead.
+// Passthrough below a knee, only compressing the excess above it — plain
+// tanh(x) distorts every sample (even ones nowhere near the ceiling: e.g.
+// tanh(0.4)=0.380, a ~5% deviation), which is pure unwanted harmonic
+// coloration on signals that never needed limiting (binaural tones peak
+// ~0.38, music pads ~0.5 — both now pass through byte-for-byte exact).
+// Generators still occasionally peak past +-1 by design (pops, booms);
+// only those get the smooth tanh compression.
+const SOFT_KNEE = 0.7;
 function softClip(x: number): number {
-  return Math.tanh(x);
+  const ax = Math.abs(x);
+  if (ax <= SOFT_KNEE) return x;
+  const sign = x > 0 ? 1 : -1;
+  const excess = ax - SOFT_KNEE;
+  return sign * (SOFT_KNEE + Math.tanh(excess / (1 - SOFT_KNEE)) * (1 - SOFT_KNEE));
 }
 
 // Renders `n` + one crossfade window of continuous samples, then blends the
@@ -231,7 +240,12 @@ function rainGenerator() {
     }
     const drop = dropEnv * (Math.random() * 2 - 1);
     dropEnv *= 0.7;
-    return hp * 1.6 + drop * 0.9;
+    // Was hp*1.6 + drop*0.9 - regularly peaked past +-2 (heavy limiting on
+    // ~16% of samples) and, worse, drop's broadband click energy so
+    // dominated the overall spectrum that rain measured spectrally
+    // indistinguishable from campfire's pops. Rebalanced toward the
+    // sustained hiss so rain reads as hiss-with-patter.
+    return hp * 1.25 + drop * 0.35;
   };
 }
 
@@ -254,7 +268,11 @@ function oceanGenerator() {
     }
     const foam = foamEnv * (Math.random() * 2 - 1);
     foamEnv *= 0.9996;
-    return lp * 4.5 * swell + foam;
+    // Was lp*4.5 - overran +-1 on ~5% of samples and was almost entirely
+    // sub-100Hz. Lower gain plus a touch of unfiltered wash brings in some
+    // mid content so it reads as "water," not just a bass swell.
+    const wash = base * 0.35 * swell;
+    return lp * 2.6 * swell + wash + foam * 0.7;
   };
 }
 
@@ -269,8 +287,10 @@ function windGenerator() {
     t += 1;
     const sec = t / SAMPLE_RATE;
     const gust = 0.4 + 0.6 * Math.pow((1 + Math.sin(sec * 2 * Math.PI * 0.22)) / 2, 2);
-    const hiss = white() * 0.35 * gust;
-    return base * (0.5 + gust) + hiss;
+    const hiss = white() * 0.3 * gust;
+    // Was base*(0.5+gust), peaking at 1.5x base during strong gusts -
+    // trimmed the gust ceiling slightly so peak gusts don't overshoot.
+    return base * (0.45 + gust * 0.9) + hiss;
   };
 }
 
@@ -280,13 +300,21 @@ function campfireGenerator() {
   const brown = brownGenerator();
   let popEnv = 0;
   return () => {
-    const base = pink() * 0.45 + brown() * 0.35;
+    // Was pink*0.45+brown*0.35 - too brown/bass-heavy, measuring 0.95
+    // spectrally similar to wind (also brown-based). Shifted toward pink
+    // for a warmer, more midrange "crackling" character.
+    const base = pink() * 0.7 + brown() * 0.12;
     if (popEnv <= 0.002 && Math.random() < 0.06) {
       popEnv = 0.6 + Math.random() * 0.6;
     }
     const pop = popEnv * (Math.random() * 2 - 1);
     popEnv *= 0.8;
-    return base + pop;
+    // Pops are broadband/white-ish clicks, same as rain's drops - at full
+    // strength they pulled campfire's whole spectral identity toward
+    // "generic white click track" (0.90 similar to rain). Sharp
+    // transients still read as audible pops even toned down, thanks to
+    // their attack, so the warm base now carries campfire's identity.
+    return base + pop * 0.4;
   };
 }
 
@@ -315,8 +343,8 @@ function thunderGenerator() {
       boom = 0.7 + Math.random() * 0.3;
     }
     boom *= 0.9992;
-    const rumble = lp * 9 * Math.max(0.15, roll) + lp * boom * 5;
-    return rumble + texture * 0.06;
+    const rumble = lp * 8 * Math.max(0.15, roll) + lp * boom * 4;
+    return rumble + texture * 0.16;
   };
 }
 
@@ -492,23 +520,38 @@ function padGenerator(freqs: number[], speed: number, warmth: number) {
   };
 }
 
+// Applied at this per-SoundKind level (NOT inside the shared primitives,
+// which rain/wind/ocean/campfire/crickets/pads all reuse internally) so
+// the same slider position means roughly the same perceived loudness
+// everywhere — measured RMS varied nearly 4x across sounds before this.
+const OUTPUT_GAIN: Partial<Record<SoundKind, number>> = {
+  white: 0.55, pink: 1.15, brown: 1.2, rain: 0.56, ocean: 0.95, wind: 1.0,
+  campfire: 1.1, thunder: 1.4, boxfan: 0.95, towerfan: 1.15, ceilingfan: 1.05,
+  acunit: 0.92, largefloorfan: 1.05, smalldeskfan: 1.1, crickets: 1.1,
+};
+
+function gained(gen: () => number, gain: number): () => number {
+  return () => gen() * gain;
+}
+
 function makeGenerator(kind: SoundKind) {
+  const g = (fn: () => number) => gained(fn, OUTPUT_GAIN[kind] ?? 1);
   switch (kind) {
-    case 'white': return whiteGenerator();
-    case 'pink': return pinkGenerator();
-    case 'brown': return brownGenerator();
-    case 'rain': return rainGenerator();
-    case 'ocean': return oceanGenerator();
-    case 'wind': return windGenerator();
-    case 'campfire': return campfireGenerator();
-    case 'thunder': return thunderGenerator();
-    case 'boxfan': return boxFanGenerator();
-    case 'towerfan': return towerFanGenerator();
-    case 'ceilingfan': return ceilingFanGenerator();
-    case 'acunit': return acUnitGenerator();
-    case 'largefloorfan': return largeFloorFanGenerator();
-    case 'smalldeskfan': return smallDeskFanGenerator();
-    case 'crickets': return cricketsGenerator();
+    case 'white': return g(whiteGenerator());
+    case 'pink': return g(pinkGenerator());
+    case 'brown': return g(brownGenerator());
+    case 'rain': return g(rainGenerator());
+    case 'ocean': return g(oceanGenerator());
+    case 'wind': return g(windGenerator());
+    case 'campfire': return g(campfireGenerator());
+    case 'thunder': return g(thunderGenerator());
+    case 'boxfan': return g(boxFanGenerator());
+    case 'towerfan': return g(towerFanGenerator());
+    case 'ceilingfan': return g(ceilingFanGenerator());
+    case 'acunit': return g(acUnitGenerator());
+    case 'largefloorfan': return g(largeFloorFanGenerator());
+    case 'smalldeskfan': return g(smallDeskFanGenerator());
+    case 'crickets': return g(cricketsGenerator());
     case 'music_soothe': return padGenerator([130.81, 164.81, 196.0], 1, 0.05);
     case 'music_deepsleep': return padGenerator([98.0, 123.47, 146.83], 0.5, 0.08);
     case 'music_ultrarelax': return padGenerator([196.0, 246.94, 293.66, 392.0], 1.3, 0.03);
