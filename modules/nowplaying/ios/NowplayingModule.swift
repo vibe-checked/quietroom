@@ -8,6 +8,11 @@ import MediaPlayer
 // gap without taking over actual playback (JS still drives expo-av; this
 // module only reports state and forwards remote button taps back to JS).
 public class NowplayingModule: Module {
+  // Avoid re-decoding the same artwork file on every setInfo call - it's
+  // called on every play/pause/mix change, but the artwork rarely changes.
+  private var lastArtworkPath: String?
+  private var lastArtwork: MPMediaItemArtwork?
+
   public func definition() -> ModuleDefinition {
     Name("Nowplaying")
 
@@ -45,7 +50,7 @@ public class NowplayingModule: Module {
       }
     }
 
-    Function("setInfo") { (title: String, subtitle: String, isPlaying: Bool) in
+    Function("setInfo") { (title: String, subtitle: String, isPlaying: Bool, artworkPath: String?) in
       var info: [String: Any] = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
       info[MPMediaItemPropertyTitle] = title
       info[MPMediaItemPropertyArtist] = subtitle
@@ -54,6 +59,18 @@ public class NowplayingModule: Module {
       // showing a fake, meaningless timeline.
       info[MPNowPlayingInfoPropertyIsLiveStream] = true
       info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+
+      if let artworkPath = artworkPath {
+        if artworkPath == self.lastArtworkPath, let cached = self.lastArtwork {
+          info[MPMediaItemPropertyArtwork] = cached
+        } else if let image = UIImage(contentsOfFile: artworkPath) {
+          let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+          self.lastArtworkPath = artworkPath
+          self.lastArtwork = artwork
+          info[MPMediaItemPropertyArtwork] = artwork
+        }
+      }
+
       MPNowPlayingInfoCenter.default().nowPlayingInfo = info
       MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }

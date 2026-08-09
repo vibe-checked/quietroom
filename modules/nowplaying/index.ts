@@ -10,8 +10,10 @@ type NativeNowPlayingModule = {
   /** Sets (or updates) the Now Playing entry. `isPlaying` controls whether
    * the lock screen/Control Center shows a pause or a play icon - the
    * entry itself stays visible either way, so play/pause can be tapped
-   * repeatedly without the widget disappearing. */
-  setInfo(title: string, subtitle: string, isPlaying: boolean): void;
+   * repeatedly without the widget disappearing. `artworkPath` is a local
+   * filesystem path (not a require()/bundle URI - the native side needs a
+   * real file it can hand to UIImage(contentsOfFile:)). */
+  setInfo(title: string, subtitle: string, isPlaying: boolean, artworkPath: string | null): void;
   /** Ends the Now Playing session entirely (nothing left to resume). */
   clear(): void;
 };
@@ -19,8 +21,13 @@ type NativeNowPlayingModule = {
 const NativeModule = requireNativeModule<NativeNowPlayingModule>('Nowplaying');
 const emitter = new EventEmitter<NowPlayingEvents>(NativeModule as any);
 
-export function setNowPlayingInfo(title: string, subtitle: string, isPlaying: boolean) {
-  NativeModule.setInfo(title, subtitle, isPlaying);
+export function setNowPlayingInfo(
+  title: string,
+  subtitle: string,
+  isPlaying: boolean,
+  artworkPath?: string | null,
+) {
+  NativeModule.setInfo(title, subtitle, isPlaying, artworkPath ?? null);
 }
 
 export function clearNowPlayingInfo() {

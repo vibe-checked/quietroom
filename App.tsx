@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { Asset } from 'expo-asset';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
@@ -77,6 +78,19 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: Sound
 ];
 
 const SOUND_CATEGORIES: SoundCategory[] = ['Nature', 'Noise', 'Fans', 'Music', 'Binaural'];
+
+// Lock-screen artwork, one illustration per category plus a generic "Mix"
+// used whenever the active sounds span more than one category - matching
+// per-sound art for all 21 sounds isn't worth the asset overhead, but a
+// relevant scene per category is.
+const NOWPLAYING_ARTWORK_SOURCE: Record<SoundCategory | 'Mix', number> = {
+  Nature: require('./assets/nowplaying/nature.png'),
+  Noise: require('./assets/nowplaying/static.png'),
+  Fans: require('./assets/nowplaying/fans.png'),
+  Music: require('./assets/nowplaying/music.png'),
+  Binaural: require('./assets/nowplaying/headphones.png'),
+  Mix: require('./assets/nowplaying/mix.png'),
+};
 
 // Curated picks shown up top so the most commonly used sounds don't require
 // hunting through categories - these are duplicates of entries below, not a
@@ -1059,6 +1073,34 @@ export default function App() {
         ? t(langKey, 'heroCustomMix')
         : t(langKey, 'heroDefaultTagline');
 
+  // require()'d images resolve to a packager/asset URI, not a plain
+  // filesystem path - the native module needs a real file it can hand to
+  // UIImage(contentsOfFile:), so each artwork is downloaded/localized once
+  // up front and cached here by category key.
+  const artworkPathsRef = useRef<Partial<Record<SoundCategory | 'Mix', string>>>({});
+  const [artworkReady, setArtworkReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        (Object.keys(NOWPLAYING_ARTWORK_SOURCE) as (SoundCategory | 'Mix')[]).map(async (key) => {
+          const asset = Asset.fromModule(NOWPLAYING_ARTWORK_SOURCE[key]);
+          await asset.downloadAsync();
+          return [key, asset.localUri ?? asset.uri] as const;
+        }),
+      );
+      if (cancelled) return;
+      artworkPathsRef.current = Object.fromEntries(entries);
+      setArtworkReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeCategories = new Set(activeSounds.map((s) => s.category));
+  const artworkKey: SoundCategory | 'Mix' = activeCategories.size === 1 ? [...activeCategories][0] : 'Mix';
+
   // Keep the lock-screen / Control Center entry in sync: no mix selected at
   // all means there's nothing to resume, so the entry is cleared entirely;
   // otherwise it stays visible and just flips its play/pause icon, so the
@@ -1068,8 +1110,11 @@ export default function App() {
       clearNowPlayingInfo();
       return;
     }
-    setNowPlayingInfo(heroLabel, 'Quiet Room', playing);
-  }, [playing, heroLabel, activeSounds.length]);
+    const artworkUri = artworkPathsRef.current[artworkKey];
+    // UIImage(contentsOfFile:) wants a plain path, not a file:// URI.
+    const artworkPath = artworkUri?.startsWith('file://') ? artworkUri.slice('file://'.length) : artworkUri;
+    setNowPlayingInfo(heroLabel, 'Quiet Room', playing, artworkPath ?? null);
+  }, [playing, heroLabel, activeSounds.length, artworkKey, artworkReady]);
 
   const CATEGORY_KEY: Record<SoundCategory, Parameters<typeof t>[1]> = {
     Noise: 'catNoise',
