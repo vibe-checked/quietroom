@@ -2,7 +2,7 @@
   "expo": {
     "name": "Quiet Room",
     "slug": "quietroom",
-    "version": "1.8",
+    "version": "1.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
