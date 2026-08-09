@@ -621,6 +621,7 @@ export default function App() {
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [themeKey, setThemeKey] = useState(DEFAULT_THEME_KEY);
   const [langKey, setLangKey] = useState<LangKey>('en');
+  const [showSettings, setShowSettings] = useState(false);
   const hapticsEnabledRef = useRef(true);
   const soundsRef = useRef<Map<SoundKind, Audio.Sound>>(new Map());
   // Bumped on every stop/timer-invalidation; in-flight loads compare
@@ -904,12 +905,132 @@ export default function App() {
     Binaural: 'catBinaural',
   };
 
+  if (showSettings) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => {
+              hapticSelection();
+              setShowSettings(false);
+            }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.backBtnText}>‹</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>{t(langKey, 'settingsSectionLabel')}</Text>
+          <View style={styles.backBtn} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+          <View style={styles.bottom}>
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsTextBlock}>
+                <Text style={styles.settingsLabel}>{t(langKey, 'settingsBackgroundLabel')}</Text>
+                <Text style={styles.settingsHint}>{t(langKey, 'settingsBackgroundHint')}</Text>
+              </View>
+              <Switch
+                value={keepPlayingInBackground}
+                onValueChange={(v) => {
+                  hapticSelection();
+                  setKeepPlayingInBackground(v);
+                }}
+                trackColor={{ false: theme.surfaceBorder, true: theme.accent }}
+                thumbColor={theme.textPrimary}
+              />
+            </View>
+
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsTextBlock}>
+                <Text style={styles.settingsLabel}>{t(langKey, 'settingsHapticsLabel')}</Text>
+                <Text style={styles.settingsHint}>{t(langKey, 'settingsHapticsHint')}</Text>
+              </View>
+              <Switch
+                value={hapticsEnabled}
+                onValueChange={(v) => {
+                  setHapticsEnabled(v);
+                  if (v) Haptics.selectionAsync().catch(() => {});
+                }}
+                trackColor={{ false: theme.surfaceBorder, true: theme.accent }}
+                thumbColor={theme.textPrimary}
+              />
+            </View>
+
+            <Text style={[styles.sectionLabel, { marginTop: 30 }]}>{t(langKey, 'settingsThemeLabel')}</Text>
+            <View style={styles.themeRow}>
+              {THEMES.map((th) => (
+                <Pressable
+                  key={th.key}
+                  onPress={() => {
+                    hapticSelection();
+                    setThemeKey(th.key);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={th.name}
+                  accessibilityState={{ checked: themeKey === th.key }}
+                  style={styles.themeSwatchWrap}
+                >
+                  <View style={[styles.themeSwatch, themeKey === th.key && styles.themeSwatchActive]}>
+                    <View style={[styles.themeSwatchInner, { backgroundColor: th.accent }]} />
+                  </View>
+                  <Text style={styles.themeSwatchLabel} numberOfLines={1}>{th.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={[styles.sectionLabel, { marginTop: 30 }]}>{t(langKey, 'settingsLanguageLabel')}</Text>
+            <View style={styles.langList}>
+              {LANGUAGES.map((l, i) => (
+                <Pressable
+                  key={l.key}
+                  onPress={() => {
+                    hapticSelection();
+                    setLangKey(l.key);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={l.label}
+                  accessibilityState={{ checked: langKey === l.key }}
+                  style={({ pressed }) => [
+                    styles.langRow,
+                    i === LANGUAGES.length - 1 && styles.langRowLast,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.langRowText}>{l.label}</Text>
+                  {langKey === l.key && <Text style={styles.langRowCheck}>✓</Text>}
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.foot}>{t(langKey, 'footer')}</Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
 
       <View style={styles.header}>
         <Text style={styles.brand}>Quiet <Text style={styles.brandItalic}>Room</Text></Text>
+        <Pressable
+          onPress={() => {
+            hapticSelection();
+            setShowSettings(true);
+          }}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={t(langKey, 'settingsSectionLabel')}
+          style={({ pressed }) => [styles.gearBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.gearBtnText}>⚙️</Text>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
@@ -922,7 +1043,7 @@ export default function App() {
               onPress={playing ? stop : () => play()}
               disabled={busyCount > 0 || !activeSounds.length}
               accessibilityRole="button"
-              accessibilityLabel={playing ? 'Stop playback' : 'Start playback'}
+              accessibilityLabel={playing ? t(langKey, 'playStop') : t(langKey, 'playStart')}
               accessibilityState={{ disabled: busyCount > 0 || !activeSounds.length, busy: busyCount > 0 }}
               style={({ pressed }) => [
                 styles.playBtn,
@@ -992,7 +1113,7 @@ export default function App() {
             </View>
           ))}
 
-          <Text style={[styles.sectionLabel, { marginTop: 22 }]}>Stop playing after</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 22 }]}>{t(langKey, 'stopPlayingAfter')}</Text>
           <View style={styles.chipRow}>
             {TIMER_OPTIONS.map((m) => (
               <Pressable
@@ -1014,7 +1135,7 @@ export default function App() {
                 ]}
               >
                 <Text style={[styles.chipText, timerMin === m && styles.chipTextActive]}>
-                  {m === 0 ? 'Off' : formatTimerMinutes(m)}
+                  {m === 0 ? t(langKey, 'timerOff') : formatTimerMinutes(m)}
                 </Text>
               </Pressable>
             ))}
@@ -1041,7 +1162,7 @@ export default function App() {
                   customTimerMin != null && timerMin === customTimerMin && styles.chipTextActive,
                 ]}
               >
-                {customTimerMin != null ? formatTimerMinutes(customTimerMin) : 'Custom…'}
+                {customTimerMin != null ? formatTimerMinutes(customTimerMin) : t(langKey, 'timerCustom')}
               </Text>
             </Pressable>
           </View>
@@ -1051,7 +1172,7 @@ export default function App() {
               <Pressable style={styles.pickerSheet} onPress={() => {}}>
                 <View style={styles.pickerHandle} />
                 <View style={styles.pickerHeaderRow}>
-                  <Text style={styles.pickerHeaderTitle}>Timer</Text>
+                  <Text style={styles.pickerHeaderTitle}>{t(langKey, 'timerSheetTitle')}</Text>
                   <Pressable
                     onPress={() => setShowTimerPicker(false)}
                     hitSlop={10}
@@ -1074,7 +1195,7 @@ export default function App() {
                     style={[styles.pickerTab, pickerMode === 'duration' && styles.pickerTabActive]}
                   >
                     <Text style={[styles.pickerTabText, pickerMode === 'duration' && styles.pickerTabTextActive]}>
-                      Duration
+                      {t(langKey, 'timerDuration')}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -1087,7 +1208,7 @@ export default function App() {
                     style={[styles.pickerTab, pickerMode === 'endtime' && styles.pickerTabActive]}
                   >
                     <Text style={[styles.pickerTabText, pickerMode === 'endtime' && styles.pickerTabTextActive]}>
-                      End Time
+                      {t(langKey, 'timerEndTime')}
                     </Text>
                   </Pressable>
                 </View>
@@ -1119,7 +1240,7 @@ export default function App() {
                 )}
 
                 <Text style={styles.pickerShutoff}>
-                  Shutoff Time: {formatClock(
+                  {t(langKey, 'timerShutoff')}: {formatClock(
                     pickerMode === 'duration'
                       ? new Date(Date.now() + pickerDurationSec * 1000)
                       : (() => {
@@ -1152,19 +1273,19 @@ export default function App() {
                     setShowTimerPicker(false);
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel="Start timer"
+                  accessibilityLabel={t(langKey, 'timerStart')}
                   style={({ pressed }) => [styles.pickerStartBtn, pressed && { opacity: 0.85 }]}
                 >
-                  <Text style={styles.pickerStartText}>Start</Text>
+                  <Text style={styles.pickerStartText}>{t(langKey, 'timerStart')}</Text>
                 </Pressable>
               </Pressable>
             </Pressable>
           </Modal>
 
           <View style={styles.presetHeaderRow}>
-            <Text style={styles.sectionLabel}>Saved mixes</Text>
-            <Pressable onPress={savePreset} hitSlop={8} accessibilityRole="button" accessibilityLabel="Save current mix">
-              <Text style={styles.saveLink}>+ Save current</Text>
+            <Text style={styles.sectionLabel}>{t(langKey, 'savedMixes')}</Text>
+            <Pressable onPress={savePreset} hitSlop={8} accessibilityRole="button" accessibilityLabel={t(langKey, 'saveCurrent')}>
+              <Text style={styles.saveLink}>{t(langKey, 'saveCurrent')}</Text>
             </Pressable>
           </View>
           {presets.length ? (
@@ -1192,12 +1313,10 @@ export default function App() {
               ))}
             </View>
           ) : (
-            <Text style={styles.emptyPresets}>Build a mix above, then save it here for later.</Text>
+            <Text style={styles.emptyPresets}>{t(langKey, 'emptyPresetsHint')}</Text>
           )}
 
-          <Text style={styles.foot}>
-            No internet needed, and keeps playing when the screen is locked.
-          </Text>
+          <Text style={styles.foot}>{t(langKey, 'footer')}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1302,7 +1421,12 @@ const DEFAULT_THEME_KEY = 'teal';
 function makeStyles(t: Theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.bg },
-    header: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 8 },
+    header: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    headerTitle: { color: t.textPrimary, fontSize: 20, fontWeight: '700' },
+    gearBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+    gearBtnText: { fontSize: 22 },
+    backBtn: { width: 36, height: 36, alignItems: 'flex-start', justifyContent: 'center' },
+    backBtnText: { color: t.textPrimary, fontSize: 32, fontWeight: '400', lineHeight: 34 },
     brand: { fontSize: 22, fontWeight: '700', color: t.textPrimary, letterSpacing: -0.2 },
     brandItalic: { fontStyle: 'italic', color: t.accent, fontWeight: '600' },
 
@@ -1375,9 +1499,9 @@ function makeStyles(t: Theme) {
     pickerStartBtn: { backgroundColor: t.accent, borderRadius: 16, paddingVertical: 17, alignItems: 'center' },
     pickerStartText: { color: t.accentText, fontSize: 17, fontWeight: '700' },
     saveLink: { color: t.accent, fontSize: 13, fontWeight: '700' },
-    emptyPresets: { color: t.textSecondary, fontSize: 13, lineHeight: 18 },
+    emptyPresets: { color: t.textPrimary, fontSize: 14, fontWeight: '500', lineHeight: 19 },
 
-    foot: { color: t.textFaint, fontSize: 10.5, textAlign: 'center', marginTop: 26, fontStyle: 'italic', lineHeight: 15, letterSpacing: 0.2 },
+    foot: { color: t.textFaint, fontSize: 10, textAlign: 'center', marginTop: 28, fontStyle: 'italic', lineHeight: 14, letterSpacing: 0.3, textTransform: 'uppercase' },
 
     settingsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
     settingsTextBlock: { flex: 1, paddingRight: 16 },
@@ -1393,5 +1517,14 @@ function makeStyles(t: Theme) {
     themeSwatchActive: { borderColor: t.textPrimary },
     themeSwatchInner: { width: 34, height: 34, borderRadius: 17 },
     themeSwatchLabel: { color: t.textSecondary, fontSize: 10, maxWidth: 60, textAlign: 'center' },
+    langList: { backgroundColor: t.surface, borderRadius: 14, borderWidth: 1, borderColor: t.surfaceBorder, overflow: 'hidden' },
+    langRow: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingVertical: 15, paddingHorizontal: 16,
+      borderBottomWidth: 1, borderBottomColor: t.surfaceBorder,
+    },
+    langRowLast: { borderBottomWidth: 0 },
+    langRowText: { color: t.textPrimary, fontSize: 16 },
+    langRowCheck: { color: t.accent, fontSize: 17, fontWeight: '700' },
   });
 }
