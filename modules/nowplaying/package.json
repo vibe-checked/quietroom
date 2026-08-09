@@ -1,0 +1,7 @@
+{
+  "name": "nowplaying",
+  "version": "1.0.0",
+  "description": "Now Playing lock screen controls (MPNowPlayingInfoCenter + MPRemoteCommandCenter) for a custom multi-track audio engine",
+  "main": "index.ts",
+  "license": "MIT"
+}

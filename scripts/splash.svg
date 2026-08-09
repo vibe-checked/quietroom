@@ -1,18 +1,18 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="moon" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#d9ecec"/>
-      <stop offset="45%" stop-color="#9fc7c7"/>
-      <stop offset="100%" stop-color="#4d8a8a"/>
+      <stop offset="0%" stop-color="#f6e9d8"/>
+      <stop offset="45%" stop-color="#eac48a"/>
+      <stop offset="100%" stop-color="#d99a52"/>
     </linearGradient>
   </defs>
 
-  <g fill="none" stroke="#4d8a8a">
+  <g fill="none" stroke="#d99a52">
     <circle cx="512" cy="470" r="330" stroke-opacity="0.22" stroke-width="10"/>
     <circle cx="512" cy="470" r="400" stroke-opacity="0.14" stroke-width="9"/>
     <circle cx="512" cy="470" r="468" stroke-opacity="0.08" stroke-width="8"/>
   </g>
 
   <circle cx="512" cy="460" r="196" fill="url(#moon)"/>
-  <circle cx="586" cy="392" r="178" fill="#0d1518"/>
+  <circle cx="586" cy="392" r="178" fill="#180f0a"/>
 </svg>

@@ -14,11 +14,16 @@ type UiKey =
   | 'heroDefaultTagline'
   | 'heroCustomMix'
   | 'soundsSectionLabel'
+  | 'catPopular'
   | 'catNoise'
   | 'catNature'
   | 'catFans'
   | 'catMusic'
   | 'catBinaural'
+  | 'editPopular'
+  | 'editPopularTitle'
+  | 'editPopularHint'
+  | 'done'
   | 'stopPlayingAfter'
   | 'timerOff'
   | 'timerCustom'
@@ -53,11 +58,16 @@ export const UI: Record<UiKey, Record<LangKey, string>> = {
   heroDefaultTagline: { en: 'Tap sounds below to build one.', es: 'Toca los sonidos de abajo para crear una.', pt: 'Toque nos sons abaixo para criar uma.', de: 'Tippe unten auf Sounds, um einen zu erstellen.', fr: 'Touchez les sons ci-dessous pour en créer un.', ja: '下の音をタップして作成しましょう。' },
   heroCustomMix: { en: 'Custom mix', es: 'Mezcla personalizada', pt: 'Mistura personalizada', de: 'Eigener Mix', fr: 'Mélange personnalisé', ja: 'カスタムミックス' },
   soundsSectionLabel: { en: 'Sounds — tap to mix', es: 'Sonidos — toca para mezclar', pt: 'Sons — toque para misturar', de: 'Sounds — zum Mischen tippen', fr: 'Sons — touchez pour mélanger', ja: 'サウンド — タップしてミックス' },
-  catNoise: { en: 'Noise', es: 'Ruido', pt: 'Ruído', de: 'Rauschen', fr: 'Bruit', ja: 'ノイズ' },
+  catPopular: { en: 'Popular', es: 'Populares', pt: 'Populares', de: 'Beliebt', fr: 'Populaires', ja: '人気' },
+  catNoise: { en: 'Static', es: 'Estática', pt: 'Estática', de: 'Rauschen', fr: 'Statique', ja: 'スタティック' },
   catNature: { en: 'Nature', es: 'Naturaleza', pt: 'Natureza', de: 'Natur', fr: 'Nature', ja: '自然' },
   catFans: { en: 'Fans', es: 'Ventiladores', pt: 'Ventiladores', de: 'Ventilatoren', fr: 'Ventilateurs', ja: '扇風機' },
   catMusic: { en: 'Music', es: 'Música', pt: 'Música', de: 'Musik', fr: 'Musique', ja: 'ミュージック' },
-  catBinaural: { en: 'Binaural', es: 'Binaural', pt: 'Binaural', de: 'Binaural', fr: 'Binaural', ja: 'バイノーラル' },
+  catBinaural: { en: 'Headphone Tones', es: 'Tonos (auriculares)', pt: 'Tons (fones)', de: 'Kopfhörer-Töne', fr: 'Sons (écouteurs)', ja: 'ヘッドホン専用' },
+  editPopular: { en: 'Edit', es: 'Editar', pt: 'Editar', de: 'Bearbeiten', fr: 'Modifier', ja: '編集' },
+  editPopularTitle: { en: 'Edit Popular', es: 'Editar Populares', pt: 'Editar Populares', de: 'Beliebt bearbeiten', fr: 'Modifier les favoris', ja: '人気を編集' },
+  editPopularHint: { en: 'Tap any sound to add or remove it from Popular.', es: 'Toca cualquier sonido para añadirlo o quitarlo de Populares.', pt: 'Toque em qualquer som para adicioná-lo ou removê-lo de Populares.', de: 'Tippe auf einen Sound, um ihn zu Beliebt hinzuzufügen oder zu entfernen.', fr: 'Touchez un son pour l’ajouter ou le retirer des favoris.', ja: 'サウンドをタップして人気への追加・削除ができます。' },
+  done: { en: 'Done', es: 'Listo', pt: 'Concluído', de: 'Fertig', fr: 'Terminé', ja: '完了' },
   stopPlayingAfter: { en: 'Stop playing after', es: 'Detener después de', pt: 'Parar de tocar após', de: 'Wiedergabe stoppen nach', fr: "Arrêter la lecture après", ja: '再生停止までの時間' },
   timerOff: { en: 'Off', es: 'Apagado', pt: 'Desligado', de: 'Aus', fr: 'Désactivé', ja: 'オフ' },
   timerCustom: { en: 'Custom…', es: 'Personalizado…', pt: 'Personalizado…', de: 'Benutzerdefiniert…', fr: 'Personnalisé…', ja: 'カスタム…' },
@@ -252,28 +262,28 @@ export const SOUND_I18N: Record<SoundKindI18n, Record<LangKey, { label: string; 
     ja: { label: 'ヒーリングカーム', tagline: 'ゆっくりと呼吸する、温かなドローン音。' },
   },
   binaural_delta: {
-    en: { label: 'Binaural Delta', tagline: 'Binaural delta tone (2Hz) — wear headphones for the effect.' },
-    es: { label: 'Binaural delta', tagline: 'Tono binaural delta (2Hz) — usa auriculares.' },
-    pt: { label: 'Binaural delta', tagline: 'Tom binaural delta (2Hz) — use fones de ouvido.' },
-    de: { label: 'Binaural Delta', tagline: 'Binauraler Delta-Ton (2Hz) — mit Kopfhörern hören.' },
-    fr: { label: 'Binaural delta', tagline: 'Tonalité binaurale delta (2Hz) — écouteurs requis.' },
-    ja: { label: 'バイノーラル・デルタ', tagline: 'デルタ波バイノーラル音（2Hz）。ヘッドホン推奨。' },
+    en: { label: '🎧 Delta', tagline: 'A deep sleep tone — needs headphones, one tone per ear, to work.' },
+    es: { label: '🎧 Delta', tagline: 'Tono de sueño profundo — necesita auriculares, un tono por oído.' },
+    pt: { label: '🎧 Delta', tagline: 'Tom de sono profundo — precisa de fones, um tom por ouvido.' },
+    de: { label: '🎧 Delta', tagline: 'Ein Tiefschlaf-Ton — braucht Kopfhörer, ein Ton pro Ohr.' },
+    fr: { label: '🎧 Delta', tagline: 'Un ton de sommeil profond — écouteurs requis, un ton par oreille.' },
+    ja: { label: '🎧 デルタ', tagline: '深い眠りのための音。左右で違う音を聞くのでヘッドホン必須。' },
   },
   binaural_theta: {
-    en: { label: 'Binaural Theta', tagline: 'Binaural theta tone (6Hz) — wear headphones for the effect.' },
-    es: { label: 'Binaural theta', tagline: 'Tono binaural theta (6Hz) — usa auriculares.' },
-    pt: { label: 'Binaural theta', tagline: 'Tom binaural theta (6Hz) — use fones de ouvido.' },
-    de: { label: 'Binaural Theta', tagline: 'Binauraler Theta-Ton (6Hz) — mit Kopfhörern hören.' },
-    fr: { label: 'Binaural thêta', tagline: 'Tonalité binaurale thêta (6Hz) — écouteurs requis.' },
-    ja: { label: 'バイノーラル・シータ', tagline: 'シータ波バイノーラル音（6Hz）。ヘッドホン推奨。' },
+    en: { label: '🎧 Theta', tagline: 'A relaxation tone — needs headphones, one tone per ear, to work.' },
+    es: { label: '🎧 Theta', tagline: 'Tono de relajación — necesita auriculares, un tono por oído.' },
+    pt: { label: '🎧 Theta', tagline: 'Tom de relaxamento — precisa de fones, um tom por ouvido.' },
+    de: { label: '🎧 Theta', tagline: 'Ein Entspannungs-Ton — braucht Kopfhörer, ein Ton pro Ohr.' },
+    fr: { label: '🎧 Thêta', tagline: 'Un ton de relaxation — écouteurs requis, un ton par oreille.' },
+    ja: { label: '🎧 シータ', tagline: 'リラックスのための音。左右で違う音を聞くのでヘッドホン必須。' },
   },
   binaural_alpha: {
-    en: { label: 'Binaural Alpha', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.' },
-    es: { label: 'Binaural alfa', tagline: 'Tono binaural alfa (10Hz) — usa auriculares.' },
-    pt: { label: 'Binaural alfa', tagline: 'Tom binaural alfa (10Hz) — use fones de ouvido.' },
-    de: { label: 'Binaural Alpha', tagline: 'Binauraler Alpha-Ton (10Hz) — mit Kopfhörern hören.' },
-    fr: { label: 'Binaural alpha', tagline: 'Tonalité binaurale alpha (10Hz) — écouteurs requis.' },
-    ja: { label: 'バイノーラル・アルファ', tagline: 'アルファ波バイノーラル音（10Hz）。ヘッドホン推奨。' },
+    en: { label: '🎧 Alpha', tagline: 'A calm-focus tone — needs headphones, one tone per ear, to work.' },
+    es: { label: '🎧 Alfa', tagline: 'Tono de calma y enfoque — necesita auriculares, un tono por oído.' },
+    pt: { label: '🎧 Alfa', tagline: 'Tom de calma e foco — precisa de fones, um tom por ouvido.' },
+    de: { label: '🎧 Alpha', tagline: 'Ein Ruhe-Fokus-Ton — braucht Kopfhörer, ein Ton pro Ohr.' },
+    fr: { label: '🎧 Alpha', tagline: 'Un ton calme et concentré — écouteurs requis, un ton par oreille.' },
+    ja: { label: '🎧 アルファ', tagline: '穏やかな集中のための音。左右で違う音を聞くのでヘッドホン必須。' },
   },
 };
 

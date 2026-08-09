@@ -75,7 +75,12 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: Sound
   { kind: 'binaural_alpha', label: 'Binaural Alpha', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.', category: 'Binaural' },
 ];
 
-const SOUND_CATEGORIES: SoundCategory[] = ['Noise', 'Nature', 'Fans', 'Music', 'Binaural'];
+const SOUND_CATEGORIES: SoundCategory[] = ['Nature', 'Noise', 'Fans', 'Music', 'Binaural'];
+
+// Curated picks shown up top so the most commonly used sounds don't require
+// hunting through categories - these are duplicates of entries below, not a
+// separate SoundCategory, so tapping either instance toggles the same sound.
+const POPULAR_KINDS: SoundKind[] = ['rain', 'ocean', 'white', 'brown', 'thunder', 'boxfan', 'music_soothe', 'crickets'];
 
 const SAMPLE_RATE = 44100;
 // Longer loops repeat less obviously — thunder booms, campfire pops, and
@@ -623,6 +628,8 @@ export default function App() {
   const [themeKey, setThemeKey] = useState(DEFAULT_THEME_KEY);
   const [langKey, setLangKey] = useState<LangKey>('en');
   const [showSettings, setShowSettings] = useState(false);
+  const [popularKinds, setPopularKinds] = useState<SoundKind[]>(POPULAR_KINDS);
+  const [showPopularEditor, setShowPopularEditor] = useState(false);
   const hapticsEnabledRef = useRef(true);
   const soundsRef = useRef<Map<SoundKind, Audio.Sound>>(new Map());
   // Bumped on every stop/timer-invalidation; in-flight loads compare
@@ -647,6 +654,7 @@ export default function App() {
           }
           if (typeof c.themeKey === 'string' && THEMES.some((th) => th.key === c.themeKey)) setThemeKey(c.themeKey);
           if (typeof c.langKey === 'string' && LANGUAGES.some((l) => l.key === c.langKey)) setLangKey(c.langKey);
+          if (Array.isArray(c.popularKinds)) setPopularKinds(c.popularKinds);
         }
       } catch {}
     })();
@@ -684,9 +692,9 @@ export default function App() {
   useEffect(() => {
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey }),
+      JSON.stringify({ mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey, popularKinds }),
     ).catch(() => {});
-  }, [mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey]);
+  }, [mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey, popularKinds]);
 
   const theme = useMemo(() => THEMES.find((th) => th.key === themeKey) ?? THEMES[0], [themeKey]);
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -826,6 +834,11 @@ export default function App() {
     [mix, playing, ensureTrackPlaying, removeTrack],
   );
 
+  const togglePopular = useCallback((k: SoundKind) => {
+    hapticSelection();
+    setPopularKinds((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  }, []);
+
   const adjustVolume = useCallback(
     (k: SoundKind, v: number) => {
       setMix((prev) => ({ ...prev, [k]: v }));
@@ -904,6 +917,42 @@ export default function App() {
     Fans: 'catFans',
     Music: 'catMusic',
     Binaural: 'catBinaural',
+  };
+
+  const renderSoundTile = (s: (typeof SOUNDS)[number]) => {
+    const vol = mix[s.kind] ?? 0;
+    const active = vol > 0;
+    const i18nSound = soundI18n(langKey, s.kind);
+    return (
+      <Pressable
+        key={s.kind}
+        onPress={() => toggleSound(s.kind)}
+        accessibilityRole="switch"
+        accessibilityLabel={i18nSound.label}
+        accessibilityHint={i18nSound.tagline}
+        accessibilityState={{ checked: active }}
+        style={({ pressed }) => [
+          styles.tile,
+          active && styles.tileActive,
+          pressed && { opacity: 0.9 },
+        ]}
+      >
+        <Text style={[styles.tileText, active && styles.tileTextActive]}>{i18nSound.label}</Text>
+        {active && (
+          <Slider
+            style={styles.tileSlider}
+            minimumValue={0.05}
+            maximumValue={1}
+            value={vol}
+            minimumTrackTintColor={theme.bg}
+            maximumTrackTintColor="rgba(0,0,0,0.35)"
+            thumbTintColor={theme.bg}
+            onValueChange={(v) => adjustVolume(s.kind, v)}
+            accessibilityLabel={`${i18nSound.label} volume`}
+          />
+        )}
+      </Pressable>
+    );
   };
 
   if (showSettings) {
@@ -1071,45 +1120,32 @@ export default function App() {
 
         <View style={styles.bottom}>
           <Text style={styles.sectionLabel}>{t(langKey, 'soundsSectionLabel')}</Text>
+
+          <View style={styles.categoryBlock}>
+            <View style={styles.presetHeaderRow}>
+              <Text style={styles.categoryLabel}>{t(langKey, 'catPopular')}</Text>
+              <Pressable
+                onPress={() => {
+                  hapticSelection();
+                  setShowPopularEditor(true);
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t(langKey, 'editPopular')}
+              >
+                <Text style={styles.saveLink}>{t(langKey, 'editPopular')}</Text>
+              </Pressable>
+            </View>
+            <View style={styles.grid}>
+              {popularKinds.map((k) => SOUNDS.find((s) => s.kind === k)).filter(Boolean).map((s) => renderSoundTile(s!))}
+            </View>
+          </View>
+
           {SOUND_CATEGORIES.map((cat) => (
             <View key={cat} style={styles.categoryBlock}>
               <Text style={styles.categoryLabel}>{t(langKey, CATEGORY_KEY[cat])}</Text>
               <View style={styles.grid}>
-                {SOUNDS.filter((s) => s.category === cat).map((s) => {
-                  const vol = mix[s.kind] ?? 0;
-                  const active = vol > 0;
-                  const i18nSound = soundI18n(langKey, s.kind);
-                  return (
-                    <Pressable
-                      key={s.kind}
-                      onPress={() => toggleSound(s.kind)}
-                      accessibilityRole="switch"
-                      accessibilityLabel={i18nSound.label}
-                      accessibilityHint={i18nSound.tagline}
-                      accessibilityState={{ checked: active }}
-                      style={({ pressed }) => [
-                        styles.tile,
-                        active && styles.tileActive,
-                        pressed && { opacity: 0.9 },
-                      ]}
-                    >
-                      <Text style={[styles.tileText, active && styles.tileTextActive]}>{i18nSound.label}</Text>
-                      {active && (
-                        <Slider
-                          style={styles.tileSlider}
-                          minimumValue={0.05}
-                          maximumValue={1}
-                          value={vol}
-                          minimumTrackTintColor={theme.bg}
-                          maximumTrackTintColor="rgba(0,0,0,0.35)"
-                          thumbTintColor={theme.bg}
-                          onValueChange={(v) => adjustVolume(s.kind, v)}
-                          accessibilityLabel={`${i18nSound.label} volume`}
-                        />
-                      )}
-                    </Pressable>
-                  );
-                })}
+                {SOUNDS.filter((s) => s.category === cat).map((s) => renderSoundTile(s))}
               </View>
             </View>
           ))}
@@ -1279,6 +1315,56 @@ export default function App() {
                 >
                   <Text style={styles.pickerStartText}>{t(langKey, 'timerStart')}</Text>
                 </Pressable>
+              </Pressable>
+            </Pressable>
+          </Modal>
+
+          <Modal visible={showPopularEditor} transparent animationType="slide" onRequestClose={() => setShowPopularEditor(false)}>
+            <Pressable style={styles.pickerOverlay} onPress={() => setShowPopularEditor(false)}>
+              <Pressable style={styles.pickerSheet} onPress={() => {}}>
+                <View style={styles.pickerHandle} />
+                <View style={styles.pickerHeaderRow}>
+                  <Text style={styles.pickerHeaderTitle}>{t(langKey, 'editPopularTitle')}</Text>
+                  <Pressable
+                    onPress={() => setShowPopularEditor(false)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(langKey, 'done')}
+                    style={({ pressed }) => [styles.pickerCloseBtn, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={styles.pickerCloseText}>✕</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.settingsHint}>{t(langKey, 'editPopularHint')}</Text>
+                <ScrollView style={styles.popularEditorScroll} showsVerticalScrollIndicator={false}>
+                  {SOUND_CATEGORIES.map((cat) => (
+                    <View key={cat} style={styles.categoryBlock}>
+                      <Text style={styles.categoryLabel}>{t(langKey, CATEGORY_KEY[cat])}</Text>
+                      <View style={styles.langList}>
+                        {SOUNDS.filter((s) => s.category === cat).map((s, i, arr) => {
+                          const included = popularKinds.includes(s.kind);
+                          return (
+                            <Pressable
+                              key={s.kind}
+                              onPress={() => togglePopular(s.kind)}
+                              accessibilityRole="checkbox"
+                              accessibilityLabel={soundI18n(langKey, s.kind).label}
+                              accessibilityState={{ checked: included }}
+                              style={({ pressed }) => [
+                                styles.langRow,
+                                i === arr.length - 1 && styles.langRowLast,
+                                pressed && { opacity: 0.7 },
+                              ]}
+                            >
+                              <Text style={styles.langRowText}>{soundI18n(langKey, s.kind).label}</Text>
+                              {included && <Text style={styles.langRowCheck}>✓</Text>}
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
               </Pressable>
             </Pressable>
           </Modal>
@@ -1519,6 +1605,7 @@ function makeStyles(t: Theme) {
     themeSwatchInner: { width: 34, height: 34, borderRadius: 17 },
     themeSwatchLabel: { color: t.textSecondary, fontSize: 10, maxWidth: 60, textAlign: 'center' },
     langList: { backgroundColor: t.surface, borderRadius: 14, borderWidth: 1, borderColor: t.surfaceBorder, overflow: 'hidden' },
+    popularEditorScroll: { maxHeight: 420, marginTop: 14 },
     langRow: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingVertical: 15, paddingHorizontal: 16,

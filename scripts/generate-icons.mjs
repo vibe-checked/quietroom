@@ -7,7 +7,7 @@ const assets = path.join(__dirname, '..', 'assets');
 const iconSvg = path.join(__dirname, 'icon.svg');
 const splashSvg = path.join(__dirname, 'splash.svg');
 
-const BG = '#0d1518';
+const BG = '#180f0a';
 
 async function run() {
   // iOS + generic app icon: opaque, flattened.
