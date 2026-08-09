@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { LANGUAGES, LangKey, soundI18n, t } from './i18n';
+import { addRemoteCommandListener, clearNowPlayingInfo, setNowPlayingInfo } from './modules/nowplaying';
 
 type SoundKind =
   | 'white'
@@ -821,6 +822,29 @@ export default function App() {
     [mix, timerMin, ensureTrackPlaying],
   );
 
+  // Stable refs so the remote-command listener (registered once) always
+  // calls the current play/stop/playing without needing to re-subscribe.
+  const playRef = useRef(play);
+  playRef.current = play;
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+
+  useEffect(() => {
+    const sub = addRemoteCommandListener((command) => {
+      if (command === 'play') {
+        if (!playingRef.current) playRef.current();
+      } else if (command === 'pause') {
+        if (playingRef.current) stopRef.current();
+      } else {
+        if (playingRef.current) stopRef.current();
+        else playRef.current();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const toggleSound = useCallback(
     (k: SoundKind) => {
       hapticSelection();
@@ -910,6 +934,18 @@ export default function App() {
       : activeSounds.length > 1
         ? t(langKey, 'heroCustomMix')
         : t(langKey, 'heroDefaultTagline');
+
+  // Keep the lock-screen / Control Center entry in sync: no mix selected at
+  // all means there's nothing to resume, so the entry is cleared entirely;
+  // otherwise it stays visible and just flips its play/pause icon, so the
+  // widget never disappears out from under a remote play/pause tap.
+  useEffect(() => {
+    if (!activeSounds.length) {
+      clearNowPlayingInfo();
+      return;
+    }
+    setNowPlayingInfo(heroLabel, 'Quiet Room', playing);
+  }, [playing, heroLabel, activeSounds.length]);
 
   const CATEGORY_KEY: Record<SoundCategory, Parameters<typeof t>[1]> = {
     Noise: 'catNoise',

@@ -1,6 +1,6 @@
 {
   "platforms": ["apple"],
   "apple": {
-    "modules": ["NowPlayingModule"]
+    "modules": ["NowplayingModule"]
   }
 }
