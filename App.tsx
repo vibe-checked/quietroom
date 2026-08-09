@@ -11,7 +11,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
+  PanResponder,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -313,19 +315,26 @@ function rainGenerator() {
 // occasional foamy hiss burst as a wave crests.
 function oceanGenerator() {
   const pink = pinkGenerator();
-  const swellHz = loopHz(0.2);
   let lp = 0;
-  let t = 0;
   let foamEnv = 0;
+  // A fixed-frequency swell - even a gentle, low-exponent sine - still has
+  // a period the ear locks onto as a rhythmic "don don don." Any FIXED
+  // period does this, no matter how subtle the depth. The fix is to never
+  // have one: chase a randomly-picked target level every few seconds
+  // instead of oscillating, so the amplitude wanders but never repeats.
+  let swellCurrent = 0.9;
+  let swellTarget = 0.9;
+  let swellStepsLeft = 0;
   return () => {
     const base = pink();
     lp = lp * 0.9 + base * 0.1;
-    t += 1;
-    const phase = (t / SAMPLE_RATE) * 2 * Math.PI * swellHz;
-    // Gentle, continuous swell - narrow range and a plain sine curve (no
-    // exponent) so it never reads as a periodic "thump," just a slow
-    // breathing wash.
-    const swell = 0.8 + 0.2 * ((1 + Math.sin(phase)) / 2);
+    if (swellStepsLeft <= 0) {
+      swellTarget = 0.8 + Math.random() * 0.2;
+      swellStepsLeft = Math.floor((3 + Math.random() * 5) * SAMPLE_RATE);
+    }
+    swellStepsLeft -= 1;
+    swellCurrent += (swellTarget - swellCurrent) * 0.00002;
+    const swell = swellCurrent;
     if (foamEnv <= 0.001 && swell > 0.92 && Math.random() < 0.0015) {
       foamEnv = 0.4;
     }
@@ -364,7 +373,8 @@ function campfireGenerator() {
   const pink = pinkGenerator();
   const brown = brownGenerator();
   let popEnv = 0;
-  let hpPrev = 0;
+  let hpPrev1 = 0;
+  let hpPrev2 = 0;
   return () => {
     // Was pink*0.45+brown*0.35 - too brown/bass-heavy, measuring 0.95
     // spectrally similar to wind (also brown-based). Shifted toward pink
@@ -374,17 +384,20 @@ function campfireGenerator() {
       popEnv = 0.6 + Math.random() * 0.6;
     }
     const raw = Math.random() * 2 - 1;
-    // First-difference high-pass biases the pop toward treble - raw
-    // broadband noise reads as a dull thump, but real fire cracks are a
-    // bright, treble-heavy transient. This is what makes it read "crisp."
-    const hp = raw - hpPrev;
-    hpPrev = raw;
-    const pop = popEnv * hp;
-    popEnv *= 0.82;
+    // A single first-difference (+6dB/octave) still wasn't crisp enough -
+    // differencing it AGAIN (+12dB/octave total) pushes far more energy
+    // into the treble, which is what a real twig-snap crack sounds like,
+    // and a faster decay keeps it a snap instead of a longer sizzle.
+    const d1 = raw - hpPrev1;
+    hpPrev1 = raw;
+    const d2 = d1 - hpPrev2;
+    hpPrev2 = d1;
+    const pop = popEnv * d2;
+    popEnv *= 0.76;
     // Pops need to be loud and sharp to read as a real fire - a quiet pop
     // isn't a pop. The warm pink/brown base still carries campfire's
     // identity at rest; the pops are allowed to punch well above it.
-    return base + pop * 1.1;
+    return base + pop * 1.6;
   };
 }
 
@@ -420,7 +433,11 @@ function thunderGenerator() {
       0.5 +
       0.3 * Math.sin(sec * 2 * Math.PI * roll1Hz) +
       0.2 * Math.sin(sec * 2 * Math.PI * roll2Hz + 1.4);
-    if (boom <= 0.002 && Math.random() < 0.0006) {
+    // Was 0.0006/sample - at 44.1kHz that's a new clap roughly every 40ms,
+    // basically continuous crackling instead of the occasional distant
+    // clap real thunder actually is. ~0.0000012 averages one clap every
+    // ~19s, which is still a random (Poisson) interval, not a fixed one.
+    if (boom <= 0.002 && Math.random() < 0.0000012) {
       boom = 0.85 + Math.random() * 0.4;
       // Real thunder starts with a fast, bright strike, not a swelling
       // rumble - give every boom a sharp crack at its onset.
@@ -550,15 +567,27 @@ function cricketsGenerator() {
     t += 1;
     const floor = pink();
     lp = lp * 0.9 + floor * 0.1;
-    const cycleLen = Math.round(SAMPLE_RATE * 0.6);
+    // Was two clean 60ms tones per cycle - a couple of pure sine notes
+    // reads as a bird's two-syllable call, not an insect. A real cricket
+    // chirp is a rapid TRILL of many short pulses (stridulation), so
+    // build a burst of ~10 short pulses instead of two long tones.
+    const cycleLen = Math.round(SAMPLE_RATE * 1.1);
     const cyclePos = (t % cycleLen) / SAMPLE_RATE;
+    const burstDur = 0.35;
     let chirp = 0;
-    const pulses = [0, 0.09];
-    for (const start of pulses) {
-      const dt = cyclePos - start;
-      if (dt >= 0 && dt < 0.06) {
-        const env = Math.sin(Math.PI * (dt / 0.06));
-        chirp += Math.sin((2 * Math.PI * 4200 * t) / SAMPLE_RATE) * env * 0.9;
+    if (cyclePos < burstDur) {
+      const pulseHz = 28;
+      const pulsePos = (cyclePos * pulseHz) % 1;
+      const pulseOnFrac = 0.35;
+      if (pulsePos < pulseOnFrac) {
+        const env = Math.sin(Math.PI * (pulsePos / pulseOnFrac));
+        // A second, non-octave partial (4200Hz + 6300Hz) adds a buzzy
+        // roughness a single pure tone doesn't have - closer to a wing
+        // stridulation than a clean whistle.
+        const tone =
+          Math.sin((2 * Math.PI * 4200 * t) / SAMPLE_RATE) * 0.7 +
+          Math.sin((2 * Math.PI * 6300 * t) / SAMPLE_RATE) * 0.3;
+        chirp = tone * env * 0.8;
       }
     }
     return lp * 0.25 + chirp;
@@ -698,6 +727,37 @@ async function ensureSampleFile(kind: SoundKind): Promise<string> {
   return path;
 }
 
+// The little bar at the top of a bottom sheet is a standard iOS affordance
+// that promises "drag this to dismiss" - it wasn't actually wired to
+// anything, so it looked grabbable but did nothing. This makes it real:
+// drag down far or fast enough on the handle and the sheet dismisses;
+// otherwise it springs back.
+function useDragToDismissSheet(visible: boolean, onDismiss: () => void) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (visible) translateY.setValue(0);
+  }, [visible]);
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dy > 0) translateY.setValue(gesture.dy);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 100 || gesture.vy > 0.8) {
+          Animated.timing(translateY, { toValue: 900, duration: 180, useNativeDriver: true }).start(() => {
+            onDismiss();
+          });
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+        }
+      },
+    }),
+  ).current;
+  return { translateY, panHandlers: panResponder.panHandlers };
+}
+
 type Mix = Partial<Record<SoundKind, number>>;
 type Preset = { id: string; name: string; mix: Mix };
 type TrackHandle = {
@@ -727,6 +787,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [popularKinds, setPopularKinds] = useState<SoundKind[]>(POPULAR_KINDS);
   const [showPopularEditor, setShowPopularEditor] = useState(false);
+  const timerDrag = useDragToDismissSheet(showTimerPicker, () => setShowTimerPicker(false));
+  const popularEditorDrag = useDragToDismissSheet(showPopularEditor, () => setShowPopularEditor(false));
   const hapticsEnabledRef = useRef(true);
   // Each active track alternates between two Audio.Sound instances of the
   // same file to loop gaplessly (see LOOP_MS/LOOP_CROSSFADE_MS above) -
@@ -1442,8 +1504,11 @@ export default function App() {
 
           <Modal visible={showTimerPicker} transparent animationType="slide" onRequestClose={() => setShowTimerPicker(false)}>
             <Pressable style={styles.pickerOverlay} onPress={() => setShowTimerPicker(false)}>
-              <Pressable style={styles.pickerSheet} onPress={() => {}}>
-                <View style={styles.pickerHandle} />
+              <Animated.View style={[styles.pickerSheet, { transform: [{ translateY: timerDrag.translateY }] }]}>
+                <View {...timerDrag.panHandlers} style={styles.pickerHandleTouchArea}>
+                  <View style={styles.pickerHandle} />
+                </View>
+                <Pressable onPress={() => {}}>
                 <View style={styles.pickerHeaderRow}>
                   <Text style={styles.pickerHeaderTitle}>{t(langKey, 'timerSheetTitle')}</Text>
                   <Pressable
@@ -1551,14 +1616,18 @@ export default function App() {
                 >
                   <Text style={styles.pickerStartText}>{t(langKey, 'timerStart')}</Text>
                 </Pressable>
-              </Pressable>
+                </Pressable>
+              </Animated.View>
             </Pressable>
           </Modal>
 
           <Modal visible={showPopularEditor} transparent animationType="slide" onRequestClose={() => setShowPopularEditor(false)}>
             <Pressable style={styles.pickerOverlay} onPress={() => setShowPopularEditor(false)}>
-              <Pressable style={styles.pickerSheet} onPress={() => {}}>
-                <View style={styles.pickerHandle} />
+              <Animated.View style={[styles.pickerSheet, { transform: [{ translateY: popularEditorDrag.translateY }] }]}>
+                <View {...popularEditorDrag.panHandlers} style={styles.pickerHandleTouchArea}>
+                  <View style={styles.pickerHandle} />
+                </View>
+                <Pressable onPress={() => {}}>
                 <View style={styles.pickerHeaderRow}>
                   <Text style={styles.pickerHeaderTitle}>{t(langKey, 'editPopularTitle')}</Text>
                   <Pressable
@@ -1601,7 +1670,8 @@ export default function App() {
                     </View>
                   ))}
                 </ScrollView>
-              </Pressable>
+                </Pressable>
+              </Animated.View>
             </Pressable>
           </Modal>
 
@@ -1807,7 +1877,8 @@ function makeStyles(t: Theme) {
     presetHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22, marginBottom: 10 },
     pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
     pickerSheet: { backgroundColor: t.bgAlt, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 10, paddingBottom: 40, paddingHorizontal: 22 },
-    pickerHandle: { width: 36, height: 5, borderRadius: 3, backgroundColor: t.surfaceBorder, alignSelf: 'center', marginBottom: 18 },
+    pickerHandleTouchArea: { paddingVertical: 12, marginTop: -10, marginBottom: 8 },
+    pickerHandle: { width: 36, height: 5, borderRadius: 3, backgroundColor: t.surfaceBorder, alignSelf: 'center' },
     pickerHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
     pickerHeaderTitle: { color: t.textPrimary, fontSize: 24, fontWeight: '700' },
     pickerCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: t.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
