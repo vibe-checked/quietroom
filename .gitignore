@@ -42,3 +42,7 @@ yarn-error.*
 
 # agent worktrees (separate git checkouts, not part of this repo)
 .claude/worktrees/
+
+# screenshot kit is its own nested git checkout (symlinked shared tooling +
+# per-app config/raw); only its output (app-store-screenshots/) is tracked
+_screenshot-kit/
