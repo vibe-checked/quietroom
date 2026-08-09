@@ -13,7 +13,7 @@ async function run() {
   // iOS + generic app icon: opaque, flattened.
   await sharp(iconSvg)
     .resize(1024, 1024)
-    .flatten({ background: '#080f11' })
+    .flatten({ background: BG })
     .png()
     .toFile(path.join(assets, 'icon.png'));
 
@@ -21,7 +21,7 @@ async function run() {
   await sharp(splashSvg).resize(1024, 1024).png().toFile(path.join(assets, 'splash-icon.png'));
 
   // Favicon (web) — small, opaque.
-  await sharp(iconSvg).resize(48, 48).flatten({ background: '#080f11' }).png().toFile(path.join(assets, 'favicon.png'));
+  await sharp(iconSvg).resize(48, 48).flatten({ background: BG }).png().toFile(path.join(assets, 'favicon.png'));
 
   // Android adaptive icon: foreground (mark on transparent, padded into safe zone)
   // and background (flat brand color fill).
