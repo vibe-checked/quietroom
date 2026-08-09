@@ -104,7 +104,7 @@ const DURATION_SEC = 24;
 // Samples of overlap crossfaded between the tail and head so the loop point
 // is inaudible instead of clicking on every repeat.
 const LOOP_CROSSFADE_SEC = 0.75;
-const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v4/`;
+const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v5/`;
 
 const TIMER_OPTIONS = [0, 30, 60, 120];
 
@@ -166,16 +166,35 @@ function softClip(x: number): number {
 // crossfade window (tail-continuation into head) so sample[0] picks up
 // smoothly from sample[n-1] when the buffer loops — eliminates the seam
 // click that a naive loop of raw generator output would have.
+//
+// Equal-power (sin/cos) curve, not linear: raw[i] and raw[n+i] are two
+// independent draws from the same noise process, so a linear blend
+// (t, 1-t) has combined energy t^2+(1-t)^2 which dips to half power right
+// at the middle of the window - an audible soft "breath"/dip at the loop
+// point. sin/cos keeps fadeIn^2+fadeOut^2 == 1 across the whole window, so
+// the perceived loudness stays constant through the seam.
 function renderLoopable(n: number, cf: number, sampleFn: () => number): Float64Array {
   const raw = new Float64Array(n + cf);
   for (let i = 0; i < n + cf; i++) raw[i] = sampleFn();
   const out = new Float64Array(n);
   for (let i = cf; i < n; i++) out[i] = raw[i];
   for (let i = 0; i < cf; i++) {
-    const t = i / cf;
-    out[i] = raw[i] * t + raw[n + i] * (1 - t);
+    const t = (i / cf) * (Math.PI / 2);
+    out[i] = raw[i] * Math.sin(t) + raw[n + i] * Math.cos(t);
   }
   return out;
+}
+
+// Snaps a modulation/oscillator frequency to the nearest value that
+// completes a whole number of cycles over exactly one loop (DURATION_SEC).
+// Without this, a generator's slow LFO (ocean swell, wind gusts, a fan's
+// flutter, a pad's vibrato/tremolo/tone) is at a different phase at
+// sample[n] than it was at sample[0] - renderLoopable's crossfade hides the
+// resulting *click*, but the swell/hum/tone itself still audibly shifts
+// character right at the seam. Snapping the frequency makes the signal
+// truly periodic across the loop boundary, so there's nothing left to hide.
+function loopHz(hz: number): number {
+  return Math.round(hz * DURATION_SEC) / DURATION_SEC;
 }
 
 function genWav(sampleFn: () => number): Uint8Array {
@@ -294,6 +313,7 @@ function rainGenerator() {
 // occasional foamy hiss burst as a wave crests.
 function oceanGenerator() {
   const pink = pinkGenerator();
+  const swellHz = loopHz(0.2);
   let lp = 0;
   let t = 0;
   let foamEnv = 0;
@@ -301,7 +321,7 @@ function oceanGenerator() {
     const base = pink();
     lp = lp * 0.9 + base * 0.1;
     t += 1;
-    const phase = (t / SAMPLE_RATE) * 2 * Math.PI * 0.2;
+    const phase = (t / SAMPLE_RATE) * 2 * Math.PI * swellHz;
     // Gentle, continuous swell - narrow range and a plain sine curve (no
     // exponent) so it never reads as a periodic "thump," just a slow
     // breathing wash.
@@ -325,12 +345,13 @@ function oceanGenerator() {
 function windGenerator() {
   const brown = brownGenerator();
   const white = whiteGenerator();
+  const gustHz = loopHz(0.22);
   let t = 0;
   return () => {
     const base = brown();
     t += 1;
     const sec = t / SAMPLE_RATE;
-    const gust = 0.4 + 0.6 * Math.pow((1 + Math.sin(sec * 2 * Math.PI * 0.22)) / 2, 2);
+    const gust = 0.4 + 0.6 * Math.pow((1 + Math.sin(sec * 2 * Math.PI * gustHz)) / 2, 2);
     const hiss = white() * 0.3 * gust;
     // A strong gust should actually sound stronger - let it peak above the
     // resting level rather than capping it for the sake of a flatter meter.
@@ -372,6 +393,8 @@ function campfireGenerator() {
 // pulsing on a fixed beat) with occasional deeper booms — distinct from
 // wind's gusting and rain's patter.
 function thunderGenerator() {
+  const roll1Hz = loopHz(0.07);
+  const roll2Hz = loopHz(0.13);
   let lp = 0;
   let mid = 0;
   let texture = 0;
@@ -395,8 +418,8 @@ function thunderGenerator() {
     texture = texture * 0.9 + w * 0.1;
     const roll =
       0.5 +
-      0.3 * Math.sin(sec * 2 * Math.PI * 0.07) +
-      0.2 * Math.sin(sec * 2 * Math.PI * 0.13 + 1.4);
+      0.3 * Math.sin(sec * 2 * Math.PI * roll1Hz) +
+      0.2 * Math.sin(sec * 2 * Math.PI * roll2Hz + 1.4);
     if (boom <= 0.002 && Math.random() < 0.0006) {
       boom = 0.85 + Math.random() * 0.4;
       // Real thunder starts with a fast, bright strike, not a swelling
@@ -449,13 +472,14 @@ function towerFanGenerator() {
 // Ceiling fan: a deep, slow motor with a gentle rhythmic flutter from the
 // blades passing overhead.
 function ceilingFanGenerator() {
+  const flutterHz = loopHz(3.2);
   let phase = 0;
   let lp = 0;
   let t = 0;
   return () => {
     phase += 1;
     t += 1;
-    const flutter = 0.85 + 0.15 * Math.sin((t / SAMPLE_RATE) * 2 * Math.PI * 3.2);
+    const flutter = 0.85 + 0.15 * Math.sin((t / SAMPLE_RATE) * 2 * Math.PI * flutterHz);
     const hum =
       (Math.sin((2 * Math.PI * 55 * phase) / SAMPLE_RATE) * 0.34 +
         Math.sin((2 * Math.PI * 110 * phase) / SAMPLE_RATE) * 0.1) *
@@ -565,6 +589,13 @@ function binauralPair(carrierHz: number, beatHz: number) {
 // whisper of pink noise for warmth — a generated stand-in for the soft
 // instrumental "sleep music" tracks other apps license.
 function padGenerator(freqs: number[], speed: number, warmth: number) {
+  // Snap every tone AND both LFOs to whole cycles-per-loop: unsnapped, each
+  // sine's phase at sample[n] doesn't match its phase at sample[0], so the
+  // chord/vibrato/tremolo audibly shifts right at the loop seam even with
+  // the crossfade in place. Post-snap the pitch drift is under 0.02%.
+  const loopFreqs = freqs.map(loopHz);
+  const vibHz = loopHz(0.07 * speed);
+  const tremHz = loopHz(0.05 * speed);
   const phases = freqs.map(() => 0);
   const vibPhases = freqs.map((_, i) => i * 1.3);
   const pink = pinkGenerator();
@@ -574,13 +605,13 @@ function padGenerator(freqs: number[], speed: number, warmth: number) {
     t += 1;
     const sec = t / SAMPLE_RATE;
     let sum = 0;
-    for (let i = 0; i < freqs.length; i++) {
-      const vib = 1 + 0.003 * Math.sin(sec * 2 * Math.PI * 0.07 * speed + vibPhases[i]);
-      phases[i] += (2 * Math.PI * freqs[i] * vib) / SAMPLE_RATE;
+    for (let i = 0; i < loopFreqs.length; i++) {
+      const vib = 1 + 0.003 * Math.sin(sec * 2 * Math.PI * vibHz + vibPhases[i]);
+      phases[i] += (2 * Math.PI * loopFreqs[i] * vib) / SAMPLE_RATE;
       sum += Math.sin(phases[i]);
     }
-    sum /= freqs.length;
-    const tremolo = 0.75 + 0.25 * Math.sin(sec * 2 * Math.PI * 0.05 * speed);
+    sum /= loopFreqs.length;
+    const tremolo = 0.75 + 0.25 * Math.sin(sec * 2 * Math.PI * tremHz);
     const n = pink();
     lp = lp * 0.95 + n * 0.05;
     return sum * 0.5 * tremolo + lp * warmth;
