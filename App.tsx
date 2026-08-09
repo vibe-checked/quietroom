@@ -288,17 +288,21 @@ function oceanGenerator() {
     lp = lp * 0.9 + base * 0.1;
     t += 1;
     const phase = (t / SAMPLE_RATE) * 2 * Math.PI * 0.2;
-    const swell = 0.35 + 0.65 * Math.pow((1 + Math.sin(phase)) / 2, 1.5);
-    if (foamEnv <= 0.001 && swell > 0.85 && Math.random() < 0.002) {
-      foamEnv = 0.6;
+    // Gentle, continuous swell - narrow range and a plain sine curve (no
+    // exponent) so it never reads as a periodic "thump," just a slow
+    // breathing wash.
+    const swell = 0.8 + 0.2 * ((1 + Math.sin(phase)) / 2);
+    if (foamEnv <= 0.001 && swell > 0.92 && Math.random() < 0.0015) {
+      foamEnv = 0.4;
     }
     const foam = foamEnv * (Math.random() * 2 - 1);
     foamEnv *= 0.9996;
-    // Was lp*4.5 - overran +-1 on ~5% of samples and was almost entirely
-    // sub-100Hz. Lower gain plus a touch of unfiltered wash brings in some
-    // mid content so it reads as "water," not just a bass swell.
-    const wash = base * 0.35 * swell;
-    return lp * 2.6 * swell + wash + foam * 0.7;
+    // The low-passed bass component used to be boosted hard (2.6x) and
+    // paired with a peaky swell curve, which produced an audible bass
+    // pulse every ~5s ("don don don") instead of continuous surf. Bass
+    // gain is way down and the broadband wash now carries the sound.
+    const wash = base * 0.6 * swell;
+    return lp * 0.9 * swell + wash + foam * 0.5;
   };
 }
 
@@ -325,6 +329,7 @@ function campfireGenerator() {
   const pink = pinkGenerator();
   const brown = brownGenerator();
   let popEnv = 0;
+  let hpPrev = 0;
   return () => {
     // Was pink*0.45+brown*0.35 - too brown/bass-heavy, measuring 0.95
     // spectrally similar to wind (also brown-based). Shifted toward pink
@@ -333,12 +338,18 @@ function campfireGenerator() {
     if (popEnv <= 0.002 && Math.random() < 0.06) {
       popEnv = 0.6 + Math.random() * 0.6;
     }
-    const pop = popEnv * (Math.random() * 2 - 1);
-    popEnv *= 0.8;
+    const raw = Math.random() * 2 - 1;
+    // First-difference high-pass biases the pop toward treble - raw
+    // broadband noise reads as a dull thump, but real fire cracks are a
+    // bright, treble-heavy transient. This is what makes it read "crisp."
+    const hp = raw - hpPrev;
+    hpPrev = raw;
+    const pop = popEnv * hp;
+    popEnv *= 0.82;
     // Pops need to be loud and sharp to read as a real fire - a quiet pop
     // isn't a pop. The warm pink/brown base still carries campfire's
     // identity at rest; the pops are allowed to punch well above it.
-    return base + pop * 0.9;
+    return base + pop * 1.1;
   };
 }
 
@@ -348,14 +359,23 @@ function campfireGenerator() {
 // wind's gusting and rain's patter.
 function thunderGenerator() {
   let lp = 0;
+  let mid = 0;
   let texture = 0;
   let t = 0;
   let boom = 0;
+  let crackEnv = 0;
+  let crackPrev = 0;
   return () => {
     t += 1;
     const sec = t / SAMPLE_RATE;
     const w = Math.random() * 2 - 1;
-    lp = lp * 0.997 + w * 0.003;
+    // Was 0.997 (~21Hz cutoff) - almost entirely below what phone/laptop
+    // speakers can reproduce, which is why the rumble read as "weird and
+    // soft" instead of real. ~110Hz keeps it bass-heavy but audible.
+    lp = lp * 0.985 + w * 0.015;
+    // A second, higher band gives the gravelly "rolling" texture real
+    // thunder has on top of the pure sub-bass.
+    mid = mid * 0.93 + w * 0.07;
     // A softer, mid-passed noise floor well below the rumble in level —
     // present enough to avoid dead silence, quiet enough to stay a bass sound.
     texture = texture * 0.9 + w * 0.1;
@@ -365,10 +385,19 @@ function thunderGenerator() {
       0.2 * Math.sin(sec * 2 * Math.PI * 0.13 + 1.4);
     if (boom <= 0.002 && Math.random() < 0.0006) {
       boom = 0.85 + Math.random() * 0.4;
+      // Real thunder starts with a fast, bright strike, not a swelling
+      // rumble - give every boom a sharp crack at its onset.
+      crackEnv = 1;
     }
     boom *= 0.9992;
-    const rumble = lp * 8 * Math.max(0.15, roll) + lp * boom * 7;
-    return rumble + texture * 0.16;
+    // First-difference high-pass for the crack - broadband and bright so
+    // the onset actually snaps instead of just fading in like the rumble.
+    const crackHp = w - crackPrev;
+    crackPrev = w;
+    const crack = crackEnv * crackHp;
+    crackEnv *= 0.9975;
+    const rumble = lp * 9 * Math.max(0.15, roll) + lp * boom * 8 + mid * boom * 3;
+    return rumble + texture * 0.18 + crack * 1.4;
   };
 }
 
