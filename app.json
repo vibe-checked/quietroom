@@ -11,7 +11,9 @@
       "bundleIdentifier": "com.markutilitylabs.quietroom",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -33,7 +35,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#0d1518"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }

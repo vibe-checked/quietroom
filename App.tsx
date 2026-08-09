@@ -5,17 +5,21 @@ import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
+import { LANGUAGES, LangKey, soundI18n, t } from './i18n';
 
 type SoundKind =
   | 'white'
@@ -44,30 +48,34 @@ type SoundKind =
 const BINAURAL_KINDS: SoundKind[] = ['binaural_delta', 'binaural_theta', 'binaural_alpha'];
 const MUSIC_KINDS: SoundKind[] = ['music_soothe', 'music_deepsleep', 'music_ultrarelax', 'music_healingcalm'];
 
-const SOUNDS: { kind: SoundKind; label: string; tagline: string }[] = [
-  { kind: 'white', label: 'White', tagline: 'Crisp, even hiss — like an old radio tuned between stations.' },
-  { kind: 'pink', label: 'Pink', tagline: 'Softer, lower energy — closer to leaves in wind.' },
-  { kind: 'brown', label: 'Brown', tagline: 'Deep, rumbling roll — surf, or a distant waterfall.' },
-  { kind: 'rain', label: 'Rain', tagline: 'Filtered noise with scattered patter — steady, soothing.' },
-  { kind: 'ocean', label: 'Ocean', tagline: 'Slow rolling waves rising and falling on a shore.' },
-  { kind: 'wind', label: 'Wind', tagline: 'Gusting air moving through open space.' },
-  { kind: 'campfire', label: 'Campfire', tagline: 'Warm crackle and pop of a low fire.' },
-  { kind: 'thunder', label: 'Thunder', tagline: 'Distant rolling rumble beneath a steady rain.' },
-  { kind: 'boxfan', label: 'Box Fan', tagline: 'The classic bedroom box fan — steady hum and moving air.' },
-  { kind: 'towerfan', label: 'Tower Fan', tagline: 'Smoother, airier whoosh — less motor, more breeze.' },
-  { kind: 'ceilingfan', label: 'Ceiling Fan', tagline: 'Deep, slow-turning hum with a gentle blade flutter.' },
-  { kind: 'acunit', label: 'Window AC', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.' },
-  { kind: 'largefloorfan', label: 'Large Floor Fan', tagline: 'A big standing fan — deep, powerful, moving a lot of air.' },
-  { kind: 'smalldeskfan', label: 'Small Desk Fan', tagline: 'A small, higher-pitched motor whir close by.' },
-  { kind: 'crickets', label: 'Night', tagline: 'Quiet dark with a chorus of distant crickets.' },
-  { kind: 'music_soothe', label: 'Soothe', tagline: 'A soft, warm pad — gentle and unhurried.' },
-  { kind: 'music_deepsleep', label: 'Deep Sleep', tagline: 'Low, slow-moving tones for drifting off.' },
-  { kind: 'music_ultrarelax', label: 'Ultra Relax', tagline: 'A brighter, shimmering pad with a light touch.' },
-  { kind: 'music_healingcalm', label: 'Healing Calm', tagline: 'A warm, slowly breathing drone.' },
-  { kind: 'binaural_delta', label: 'Binaural Delta', tagline: 'Binaural delta tone (2Hz) — wear headphones for the effect.' },
-  { kind: 'binaural_theta', label: 'Binaural Theta', tagline: 'Binaural theta tone (6Hz) — wear headphones for the effect.' },
-  { kind: 'binaural_alpha', label: 'Binaural Alpha', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.' },
+type SoundCategory = 'Noise' | 'Nature' | 'Fans' | 'Music' | 'Binaural';
+
+const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: SoundCategory }[] = [
+  { kind: 'white', label: 'White', tagline: 'Crisp, even hiss — like an old radio tuned between stations.', category: 'Noise' },
+  { kind: 'pink', label: 'Pink', tagline: 'Softer, lower energy — closer to leaves in wind.', category: 'Noise' },
+  { kind: 'brown', label: 'Brown', tagline: 'Deep, rumbling roll — surf, or a distant waterfall.', category: 'Noise' },
+  { kind: 'rain', label: 'Rain', tagline: 'Filtered noise with scattered patter — steady, soothing.', category: 'Nature' },
+  { kind: 'ocean', label: 'Ocean', tagline: 'Slow rolling waves rising and falling on a shore.', category: 'Nature' },
+  { kind: 'wind', label: 'Wind', tagline: 'Gusting air moving through open space.', category: 'Nature' },
+  { kind: 'campfire', label: 'Campfire', tagline: 'Warm crackle and pop of a low fire.', category: 'Nature' },
+  { kind: 'thunder', label: 'Thunder', tagline: 'Distant rolling rumble beneath a steady rain.', category: 'Nature' },
+  { kind: 'crickets', label: 'Night', tagline: 'Quiet dark with a chorus of distant crickets.', category: 'Nature' },
+  { kind: 'boxfan', label: 'Box Fan', tagline: 'The classic bedroom box fan — steady hum and moving air.', category: 'Fans' },
+  { kind: 'towerfan', label: 'Tower Fan', tagline: 'Smoother, airier whoosh — less motor, more breeze.', category: 'Fans' },
+  { kind: 'ceilingfan', label: 'Ceiling Fan', tagline: 'Deep, slow-turning hum with a gentle blade flutter.', category: 'Fans' },
+  { kind: 'acunit', label: 'Window AC', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.', category: 'Fans' },
+  { kind: 'largefloorfan', label: 'Large Floor Fan', tagline: 'A big standing fan — deep, powerful, moving a lot of air.', category: 'Fans' },
+  { kind: 'smalldeskfan', label: 'Small Desk Fan', tagline: 'A small, higher-pitched motor whir close by.', category: 'Fans' },
+  { kind: 'music_soothe', label: 'Soothe', tagline: 'A soft, warm pad — gentle and unhurried.', category: 'Music' },
+  { kind: 'music_deepsleep', label: 'Deep Sleep', tagline: 'Low, slow-moving tones for drifting off.', category: 'Music' },
+  { kind: 'music_ultrarelax', label: 'Ultra Relax', tagline: 'A brighter, shimmering pad with a light touch.', category: 'Music' },
+  { kind: 'music_healingcalm', label: 'Healing Calm', tagline: 'A warm, slowly breathing drone.', category: 'Music' },
+  { kind: 'binaural_delta', label: 'Binaural Delta', tagline: 'Binaural delta tone (2Hz) — wear headphones for the effect.', category: 'Binaural' },
+  { kind: 'binaural_theta', label: 'Binaural Theta', tagline: 'Binaural theta tone (6Hz) — wear headphones for the effect.', category: 'Binaural' },
+  { kind: 'binaural_alpha', label: 'Binaural Alpha', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.', category: 'Binaural' },
 ];
+
+const SOUND_CATEGORIES: SoundCategory[] = ['Noise', 'Nature', 'Fans', 'Music', 'Binaural'];
 
 const SAMPLE_RATE = 44100;
 // Longer loops repeat less obviously — thunder booms, campfire pops, and
@@ -78,7 +86,18 @@ const DURATION_SEC = 24;
 const LOOP_CROSSFADE_SEC = 0.75;
 const SAMPLES_DIR = `${FileSystem.cacheDirectory}quietroom-samples-v3/`;
 
-const TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
+const TIMER_OPTIONS = [0, 30, 60, 120];
+
+function formatTimerMinutes(m: number): string {
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
+function formatClock(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 const DEFAULT_VOLUME = 0.7;
 const FADE_SECONDS = 5;
 const STORAGE_KEY = 'quietroom:config:v2';
@@ -547,9 +566,19 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [busyCount, setBusyCount] = useState(0);
   const [timerMin, setTimerMin] = useState(0); // 0 = no timer
+  const [customTimerMin, setCustomTimerMin] = useState<number | null>(null);
+  const [showTimerPicker, setShowTimerPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'duration' | 'endtime'>('duration');
+  const [pickerDurationSec, setPickerDurationSec] = useState(30 * 60);
+  const [pickerEndTime, setPickerEndTime] = useState(() => new Date(Date.now() + 30 * 60 * 1000));
   const [timerEnds, setTimerEnds] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [keepPlayingInBackground, setKeepPlayingInBackground] = useState(true);
+  const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const [themeKey, setThemeKey] = useState(DEFAULT_THEME_KEY);
+  const [langKey, setLangKey] = useState<LangKey>('en');
+  const hapticsEnabledRef = useRef(true);
   const soundsRef = useRef<Map<SoundKind, Audio.Sound>>(new Map());
   // Bumped on every stop/timer-invalidation; in-flight loads compare
   // against it on resolve and discard themselves if it has moved on,
@@ -564,17 +593,16 @@ export default function App() {
           const c = JSON.parse(cfg);
           if (c.mix && typeof c.mix === 'object') setMix(c.mix);
           if (typeof c.timerMin === 'number') setTimerMin(c.timerMin);
+          if (typeof c.customTimerMin === 'number') setCustomTimerMin(c.customTimerMin);
           if (Array.isArray(c.presets)) setPresets(c.presets);
+          if (typeof c.keepPlayingInBackground === 'boolean') setKeepPlayingInBackground(c.keepPlayingInBackground);
+          if (typeof c.hapticsEnabled === 'boolean') {
+            setHapticsEnabled(c.hapticsEnabled);
+            hapticsEnabledRef.current = c.hapticsEnabled;
+          }
+          if (typeof c.themeKey === 'string' && THEMES.some((th) => th.key === c.themeKey)) setThemeKey(c.themeKey);
+          if (typeof c.langKey === 'string' && LANGUAGES.some((l) => l.key === c.langKey)) setLangKey(c.langKey);
         }
-      } catch {}
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-        });
       } catch {}
     })();
     return () => {
@@ -582,9 +610,41 @@ export default function App() {
     };
   }, []);
 
+  // Re-applies whenever the toggle changes, and once on mount with the
+  // default (true) before any saved preference has loaded.
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ mix, timerMin, presets })).catch(() => {});
-  }, [mix, timerMin, presets]);
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: keepPlayingInBackground,
+      shouldDuckAndroid: true,
+      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+    }).catch(() => {});
+  }, [keepPlayingInBackground]);
+
+  useEffect(() => {
+    hapticsEnabledRef.current = hapticsEnabled;
+  }, [hapticsEnabled]);
+
+  const hapticImpact = useCallback((style: Haptics.ImpactFeedbackStyle) => {
+    if (hapticsEnabledRef.current) Haptics.impactAsync(style).catch(() => {});
+  }, []);
+  const hapticSelection = useCallback(() => {
+    if (hapticsEnabledRef.current) Haptics.selectionAsync().catch(() => {});
+  }, []);
+  const hapticNotification = useCallback((type: Haptics.NotificationFeedbackType) => {
+    if (hapticsEnabledRef.current) Haptics.notificationAsync(type).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey }),
+    ).catch(() => {});
+  }, [mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey]);
+
+  const theme = useMemo(() => THEMES.find((th) => th.key === themeKey) ?? THEMES[0], [themeKey]);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // Ticking clock for sleep timer countdown + fade-out display
   useEffect(() => {
@@ -634,7 +694,7 @@ export default function App() {
     setPlaying(false);
     setTimerEnds(null);
     setBusyCount((c) => Math.max(0, c - 1));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
   }, [mix]);
 
   // Auto fade-out + stop on timer expiry
@@ -703,14 +763,14 @@ export default function App() {
       setPlaying(true);
       await Promise.all(active.map(([k, v]) => ensureTrackPlaying(k, v)));
       if (timerMin > 0) setTimerEnds(Date.now() + timerMin * 60 * 1000);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
     },
     [mix, timerMin, ensureTrackPlaying],
   );
 
   const toggleSound = useCallback(
     (k: SoundKind) => {
-      Haptics.selectionAsync().catch(() => {});
+      hapticSelection();
       const turningOn = !((mix[k] ?? 0) > 0);
       setMix((prev) => ({ ...prev, [k]: turningOn ? DEFAULT_VOLUME : 0 }));
       if (playing) {
@@ -745,7 +805,7 @@ export default function App() {
         if (!trimmed) return;
         const preset: Preset = { id: `${Date.now()}`, name: trimmed, mix: { ...mix } };
         setPresets((prev) => [...prev, preset]);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        hapticNotification(Haptics.NotificationFeedbackType.Success);
       },
       'plain-text',
     );
@@ -753,7 +813,7 @@ export default function App() {
 
   const loadPreset = useCallback(
     async (p: Preset) => {
-      Haptics.selectionAsync().catch(() => {});
+      hapticSelection();
       const wasPlaying = playing;
       if (wasPlaying) await stop();
       setMix(p.mix);
@@ -783,8 +843,23 @@ export default function App() {
       : `${remM}:${remS.toString().padStart(2, '0')}`;
 
   const activeSounds = SOUNDS.filter((s) => (mix[s.kind] ?? 0) > 0);
-  const heroLabel = activeSounds.length ? activeSounds.map((s) => s.label).join(' + ') : 'Choose a mix';
-  const heroTagline = activeSounds.length === 1 ? activeSounds[0].tagline : activeSounds.length > 1 ? 'Custom mix' : 'Tap sounds below to build one.';
+  const heroLabel = activeSounds.length
+    ? activeSounds.map((s) => soundI18n(langKey, s.kind).label).join(' + ')
+    : t(langKey, 'heroDefaultLabel');
+  const heroTagline =
+    activeSounds.length === 1
+      ? soundI18n(langKey, activeSounds[0].kind).tagline
+      : activeSounds.length > 1
+        ? t(langKey, 'heroCustomMix')
+        : t(langKey, 'heroDefaultTagline');
+
+  const CATEGORY_KEY: Record<SoundCategory, Parameters<typeof t>[1]> = {
+    Noise: 'catNoise',
+    Nature: 'catNature',
+    Fans: 'catFans',
+    Music: 'catMusic',
+    Binaural: 'catBinaural',
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -813,72 +888,80 @@ export default function App() {
                 (busyCount > 0 || !activeSounds.length) && { opacity: 0.5 },
               ]}
             >
-              {busyCount > 0 ? (
-                <ActivityIndicator color="#fff" size="large" />
-              ) : (
-                <Text style={[styles.playBtnText, playing && styles.playBtnTextPlaying]}>
-                  {playing ? '■' : '▶'}
-                </Text>
-              )}
+              <View style={styles.playBtnInner} pointerEvents="none">
+                {busyCount > 0 ? (
+                  <ActivityIndicator color="#fff" size="large" />
+                ) : (
+                  <Text style={[styles.playBtnText, playing && styles.playBtnTextPlaying]}>
+                    {playing ? '■' : '▶'}
+                  </Text>
+                )}
+              </View>
             </Pressable>
             {timerEnds != null && playing && (
-              <Text style={styles.remaining}>{remLabel}</Text>
+              <Text style={styles.remaining}>Stopping in {remLabel}</Text>
             )}
           </View>
         </View>
 
         <View style={styles.bottom}>
-          <Text style={styles.sectionLabel}>Sounds — tap to mix</Text>
-          <View style={styles.grid}>
-            {SOUNDS.map((s) => {
-              const vol = mix[s.kind] ?? 0;
-              const active = vol > 0;
-              return (
-                <Pressable
-                  key={s.kind}
-                  onPress={() => toggleSound(s.kind)}
-                  accessibilityRole="switch"
-                  accessibilityLabel={s.label}
-                  accessibilityHint={s.tagline}
-                  accessibilityState={{ checked: active }}
-                  style={({ pressed }) => [
-                    styles.tile,
-                    active && styles.tileActive,
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text style={[styles.tileText, active && styles.tileTextActive]}>{s.label}</Text>
-                  {active && (
-                    <Slider
-                      style={styles.tileSlider}
-                      minimumValue={0.05}
-                      maximumValue={1}
-                      value={vol}
-                      minimumTrackTintColor="#0d1518"
-                      maximumTrackTintColor="rgba(13,21,24,0.35)"
-                      thumbTintColor="#0d1518"
-                      onValueChange={(v) => adjustVolume(s.kind, v)}
-                      accessibilityLabel={`${s.label} volume`}
-                    />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
+          <Text style={styles.sectionLabel}>{t(langKey, 'soundsSectionLabel')}</Text>
+          {SOUND_CATEGORIES.map((cat) => (
+            <View key={cat} style={styles.categoryBlock}>
+              <Text style={styles.categoryLabel}>{t(langKey, CATEGORY_KEY[cat])}</Text>
+              <View style={styles.grid}>
+                {SOUNDS.filter((s) => s.category === cat).map((s) => {
+                  const vol = mix[s.kind] ?? 0;
+                  const active = vol > 0;
+                  const i18nSound = soundI18n(langKey, s.kind);
+                  return (
+                    <Pressable
+                      key={s.kind}
+                      onPress={() => toggleSound(s.kind)}
+                      accessibilityRole="switch"
+                      accessibilityLabel={i18nSound.label}
+                      accessibilityHint={i18nSound.tagline}
+                      accessibilityState={{ checked: active }}
+                      style={({ pressed }) => [
+                        styles.tile,
+                        active && styles.tileActive,
+                        pressed && { opacity: 0.9 },
+                      ]}
+                    >
+                      <Text style={[styles.tileText, active && styles.tileTextActive]}>{i18nSound.label}</Text>
+                      {active && (
+                        <Slider
+                          style={styles.tileSlider}
+                          minimumValue={0.05}
+                          maximumValue={1}
+                          value={vol}
+                          minimumTrackTintColor={theme.bg}
+                          maximumTrackTintColor="rgba(0,0,0,0.35)"
+                          thumbTintColor={theme.bg}
+                          onValueChange={(v) => adjustVolume(s.kind, v)}
+                          accessibilityLabel={`${i18nSound.label} volume`}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
 
-          <Text style={[styles.sectionLabel, { marginTop: 22 }]}>Sleep timer</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 22 }]}>Stop playing after</Text>
           <View style={styles.chipRow}>
             {TIMER_OPTIONS.map((m) => (
               <Pressable
                 key={m}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
+                  hapticSelection();
                   setTimerMin(m);
                   if (playing && m > 0) setTimerEnds(Date.now() + m * 60 * 1000);
                   else if (m === 0) setTimerEnds(null);
                 }}
                 accessibilityRole="radio"
-                accessibilityLabel={m === 0 ? 'No sleep timer' : `Sleep timer, ${m} minutes`}
+                accessibilityLabel={m === 0 ? 'Do not stop automatically' : `Stop playing after ${formatTimerMinutes(m)}`}
                 accessibilityState={{ checked: timerMin === m }}
                 style={({ pressed }) => [
                   styles.chip,
@@ -888,11 +971,152 @@ export default function App() {
                 ]}
               >
                 <Text style={[styles.chipText, timerMin === m && styles.chipTextActive]}>
-                  {m === 0 ? 'Off' : `${m}m`}
+                  {m === 0 ? 'Off' : formatTimerMinutes(m)}
                 </Text>
               </Pressable>
             ))}
+            <Pressable
+              onPress={() => {
+                hapticSelection();
+                setPickerDurationSec((customTimerMin ?? 30) * 60);
+                setShowTimerPicker(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={customTimerMin != null ? `Stop playing after ${formatTimerMinutes(customTimerMin)}` : 'Set a custom stop time'}
+              accessibilityHint="Opens a wheel to pick hours and minutes"
+              accessibilityState={{ checked: customTimerMin != null && timerMin === customTimerMin }}
+              style={({ pressed }) => [
+                styles.chip,
+                styles.timerChip,
+                customTimerMin != null && timerMin === customTimerMin && styles.chipActive,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  customTimerMin != null && timerMin === customTimerMin && styles.chipTextActive,
+                ]}
+              >
+                {customTimerMin != null ? formatTimerMinutes(customTimerMin) : 'Custom…'}
+              </Text>
+            </Pressable>
           </View>
+
+          <Modal visible={showTimerPicker} transparent animationType="slide" onRequestClose={() => setShowTimerPicker(false)}>
+            <Pressable style={styles.pickerOverlay} onPress={() => setShowTimerPicker(false)}>
+              <Pressable style={styles.pickerSheet} onPress={() => {}}>
+                <View style={styles.pickerHandle} />
+                <View style={styles.pickerHeaderRow}>
+                  <Text style={styles.pickerHeaderTitle}>Timer</Text>
+                  <Pressable
+                    onPress={() => setShowTimerPicker(false)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    style={({ pressed }) => [styles.pickerCloseBtn, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={styles.pickerCloseText}>✕</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.pickerTabs}>
+                  <Pressable
+                    onPress={() => {
+                      hapticSelection();
+                      setPickerMode('duration');
+                    }}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: pickerMode === 'duration' }}
+                    style={[styles.pickerTab, pickerMode === 'duration' && styles.pickerTabActive]}
+                  >
+                    <Text style={[styles.pickerTabText, pickerMode === 'duration' && styles.pickerTabTextActive]}>
+                      Duration
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      hapticSelection();
+                      setPickerMode('endtime');
+                    }}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: pickerMode === 'endtime' }}
+                    style={[styles.pickerTab, pickerMode === 'endtime' && styles.pickerTabActive]}
+                  >
+                    <Text style={[styles.pickerTabText, pickerMode === 'endtime' && styles.pickerTabTextActive]}>
+                      End Time
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {pickerMode === 'duration' ? (
+                  <DateTimePicker
+                    key="duration"
+                    mode="countdown"
+                    display="spinner"
+                    value={new Date(0, 0, 0, Math.floor(pickerDurationSec / 3600), Math.floor((pickerDurationSec % 3600) / 60))}
+                    onChange={(_, date) => {
+                      if (date) setPickerDurationSec(date.getHours() * 3600 + date.getMinutes() * 60);
+                    }}
+                    themeVariant="dark"
+                    style={styles.pickerWheel}
+                  />
+                ) : (
+                  <DateTimePicker
+                    key="endtime"
+                    mode="time"
+                    display="spinner"
+                    value={pickerEndTime}
+                    onChange={(_, date) => {
+                      if (date) setPickerEndTime(date);
+                    }}
+                    themeVariant="dark"
+                    style={styles.pickerWheel}
+                  />
+                )}
+
+                <Text style={styles.pickerShutoff}>
+                  Shutoff Time: {formatClock(
+                    pickerMode === 'duration'
+                      ? new Date(Date.now() + pickerDurationSec * 1000)
+                      : (() => {
+                          const target = new Date(pickerEndTime);
+                          const now = new Date();
+                          target.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+                          if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+                          return target;
+                        })(),
+                  )}
+                </Text>
+
+                <Pressable
+                  onPress={() => {
+                    let minutes: number;
+                    if (pickerMode === 'duration') {
+                      minutes = Math.max(1, Math.round(pickerDurationSec / 60));
+                    } else {
+                      const target = new Date(pickerEndTime);
+                      const now = new Date();
+                      target.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+                      if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+                      minutes = Math.max(1, Math.round((target.getTime() - now.getTime()) / 60000));
+                    }
+                    setCustomTimerMin(minutes);
+                    setTimerMin(minutes);
+                    setTimerEnds(Date.now() + minutes * 60 * 1000);
+                    if (!playing) play();
+                    hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
+                    setShowTimerPicker(false);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start timer"
+                  style={({ pressed }) => [styles.pickerStartBtn, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.pickerStartText}>Start</Text>
+                </Pressable>
+              </Pressable>
+            </Pressable>
+          </Modal>
 
           <View style={styles.presetHeaderRow}>
             <Text style={styles.sectionLabel}>Saved mixes</Text>
@@ -903,25 +1127,33 @@ export default function App() {
           {presets.length ? (
             <View style={styles.chipRow}>
               {presets.map((p) => (
-                <Pressable
-                  key={p.id}
-                  onPress={() => loadPreset(p)}
-                  onLongPress={() => deletePreset(p)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Load mix: ${p.name}`}
-                  accessibilityHint="Double tap and hold to delete"
-                  style={({ pressed }) => [styles.chip, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={styles.chipText}>{p.name}</Text>
-                </Pressable>
+                <View key={p.id} style={[styles.chip, styles.presetChip]}>
+                  <Pressable
+                    onPress={() => loadPreset(p)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Load mix: ${p.name}`}
+                    style={({ pressed }) => pressed && { opacity: 0.85 }}
+                  >
+                    <Text style={styles.chipText}>{p.name}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => deletePreset(p)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete mix: ${p.name}`}
+                    style={({ pressed }) => [styles.presetDeleteBtn, pressed && { opacity: 0.6 }]}
+                  >
+                    <Text style={styles.presetDeleteText}>✕</Text>
+                  </Pressable>
+                </View>
               ))}
             </View>
           ) : (
-            <Text style={styles.emptyPresets}>Build a mix above, then save it here for later. Long-press a mix to delete it.</Text>
+            <Text style={styles.emptyPresets}>Build a mix above, then save it here for later.</Text>
           )}
 
           <Text style={styles.foot}>
-            Sounds are generated on this device and keep playing with the screen locked. Nothing is downloaded, streamed, or sent anywhere.
+            No internet needed, and keeps playing when the screen is locked.
           </Text>
         </View>
       </ScrollView>
@@ -929,59 +1161,194 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0d1518' },
-  header: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 8 },
-  brand: { fontSize: 22, fontWeight: '700', color: '#e2eced', letterSpacing: -0.2 },
-  brandItalic: { fontStyle: 'italic', color: '#4d8a8a', fontWeight: '600' },
+type Theme = {
+  key: string;
+  name: string;
+  bg: string;
+  bgAlt: string;
+  surface: string;
+  surfaceBorder: string;
+  surfaceAlt: string;
+  accent: string;
+  accentText: string;
+  textPrimary: string;
+  textSecondary: string;
+  textTertiary: string;
+  textFaint: string;
+};
 
-  scrollBody: { flexGrow: 1 },
-  body: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingTop: 24, paddingBottom: 12 },
-  bigLabel: { color: '#e2eced', fontSize: 32, fontWeight: '300', letterSpacing: -0.5, marginBottom: 8, textAlign: 'center' },
-  tagline: { color: '#7a9090', fontSize: 14, textAlign: 'center', maxWidth: 300, fontStyle: 'italic', marginBottom: 32 },
-
-  dial: { alignItems: 'center', justifyContent: 'center' },
-  playBtn: {
-    width: 120, height: 120, borderRadius: 60,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#1f3334',
-    borderWidth: 1.5, borderColor: '#3a5e60',
+const THEMES: Theme[] = [
+  {
+    key: 'teal',
+    name: 'Midnight Teal',
+    bg: '#0d1518',
+    bgAlt: '#16232a',
+    surface: '#1c2829',
+    surfaceBorder: '#2a3a3b',
+    surfaceAlt: '#243538',
+    accent: '#4d8a8a',
+    accentText: '#0d1518',
+    textPrimary: '#e2eced',
+    textSecondary: '#9aafaf',
+    textTertiary: '#5d7373',
+    textFaint: '#3f5252',
   },
-  playBtnPlaying: { backgroundColor: '#4d8a8a', borderColor: '#4d8a8a' },
-  playBtnText: { color: '#e2eced', fontSize: 42, lineHeight: 44, marginLeft: 6 },
-  playBtnTextPlaying: { marginLeft: 0 },
-  remaining: { marginTop: 18, color: '#7a9090', fontSize: 20, fontVariant: ['tabular-nums'], letterSpacing: 1 },
-
-  bottom: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 28 },
-  sectionLabel: { fontSize: 11, color: '#5d7373', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 },
-
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  tile: {
-    width: '47%',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: '#1c2829',
-    borderWidth: 1,
-    borderColor: '#2a3a3b',
-    minHeight: 56,
-    justifyContent: 'center',
+  {
+    key: 'space',
+    name: 'Deep Space',
+    bg: '#100e1c',
+    bgAlt: '#1a1730',
+    surface: '#201c38',
+    surfaceBorder: '#322c52',
+    surfaceAlt: '#2a2447',
+    accent: '#8a7cf0',
+    accentText: '#100e1c',
+    textPrimary: '#e8e4fb',
+    textSecondary: '#a99fd6',
+    textTertiary: '#6a5f99',
+    textFaint: '#453d6b',
   },
-  tileActive: { backgroundColor: '#4d8a8a', borderColor: '#4d8a8a' },
-  tileText: { color: '#9aafaf', fontSize: 15, fontWeight: '600' },
-  tileTextActive: { color: '#0d1518' },
-  tileSlider: { width: '100%', height: 28, marginTop: 4 },
+  {
+    key: 'forest',
+    name: 'Forest Night',
+    bg: '#0c1510',
+    bgAlt: '#16241c',
+    surface: '#1b2b22',
+    surfaceBorder: '#2b4234',
+    surfaceAlt: '#223a2c',
+    accent: '#5fae7c',
+    accentText: '#0c1510',
+    textPrimary: '#e3f0e6',
+    textSecondary: '#9dc2a9',
+    textTertiary: '#5c8068',
+    textFaint: '#3c5747',
+  },
+  {
+    key: 'ember',
+    name: 'Warm Ember',
+    bg: '#180f0a',
+    bgAlt: '#241811',
+    surface: '#2b1c13',
+    surfaceBorder: '#47301f',
+    surfaceAlt: '#382417',
+    accent: '#d99a52',
+    accentText: '#180f0a',
+    textPrimary: '#f3e6d8',
+    textSecondary: '#cba382',
+    textTertiary: '#8a6a51',
+    textFaint: '#5c4736',
+  },
+  {
+    key: 'ocean',
+    name: 'Ocean Depth',
+    bg: '#091420',
+    bgAlt: '#10202f',
+    surface: '#142838',
+    surfaceBorder: '#22415a',
+    surfaceAlt: '#1b3547',
+    accent: '#4fa3d9',
+    accentText: '#091420',
+    textPrimary: '#e2f0f8',
+    textSecondary: '#9dc4dd',
+    textTertiary: '#5c8298',
+    textFaint: '#3c5764',
+  },
+];
+const DEFAULT_THEME_KEY = 'teal';
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: '#1c2829', borderWidth: 1, borderColor: '#2a3a3b' },
-  timerChip: { paddingHorizontal: 14, paddingVertical: 8 },
-  chipActive: { backgroundColor: '#4d8a8a', borderColor: '#4d8a8a' },
-  chipText: { color: '#9aafaf', fontSize: 14, fontWeight: '600' },
-  chipTextActive: { color: '#0d1518' },
+function makeStyles(t: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: t.bg },
+    header: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 8 },
+    brand: { fontSize: 22, fontWeight: '700', color: t.textPrimary, letterSpacing: -0.2 },
+    brandItalic: { fontStyle: 'italic', color: t.accent, fontWeight: '600' },
 
-  presetHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22, marginBottom: 10 },
-  saveLink: { color: '#4d8a8a', fontSize: 13, fontWeight: '700' },
-  emptyPresets: { color: '#4a5e5e', fontSize: 12, fontStyle: 'italic', lineHeight: 17 },
+    scrollBody: { flexGrow: 1 },
+    body: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingTop: 24, paddingBottom: 12 },
+    bigLabel: { color: t.textPrimary, fontSize: 32, fontWeight: '300', letterSpacing: -0.5, marginBottom: 8, textAlign: 'center' },
+    tagline: { color: t.textSecondary, fontSize: 14, textAlign: 'center', maxWidth: 300, fontStyle: 'italic', marginBottom: 32 },
 
-  foot: { color: '#4a5e5e', fontSize: 11, textAlign: 'center', marginTop: 22, fontStyle: 'italic', lineHeight: 16 },
-});
+    dial: { alignItems: 'center', justifyContent: 'center' },
+    playBtn: {
+      width: 120, height: 120, borderRadius: 60,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: t.surface,
+      borderWidth: 1.5, borderColor: t.surfaceBorder,
+    },
+    playBtnPlaying: { backgroundColor: t.accent, borderColor: t.accent },
+    playBtnInner: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+    playBtnText: { color: t.textPrimary, fontSize: 42, lineHeight: 44, marginLeft: 6 },
+    playBtnTextPlaying: { marginLeft: 0 },
+    remaining: { marginTop: 18, color: t.textSecondary, fontSize: 20, fontVariant: ['tabular-nums'], letterSpacing: 1 },
+
+    bottom: { paddingHorizontal: 22, paddingTop: 8, paddingBottom: 28 },
+    sectionLabel: { fontSize: 11, color: t.textTertiary, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 },
+
+    categoryBlock: { marginBottom: 18 },
+    categoryLabel: { fontSize: 13, color: t.textSecondary, fontWeight: '700', marginBottom: 8 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    tile: {
+      width: '47%',
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      borderRadius: 16,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.surfaceBorder,
+      minHeight: 56,
+      justifyContent: 'center',
+    },
+    tileActive: { backgroundColor: t.accent, borderColor: t.accent },
+    tileText: { color: t.textSecondary, fontSize: 15, fontWeight: '600' },
+    tileTextActive: { color: t.accentText },
+    tileSlider: { width: '100%', height: 28, marginTop: 4 },
+
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chipRowScroll: { flexDirection: 'row', gap: 8, paddingRight: 4 },
+    chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: t.surface, borderWidth: 1, borderColor: t.surfaceBorder },
+    presetChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 10 },
+    presetDeleteBtn: { width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+    presetDeleteText: { color: t.textSecondary, fontSize: 10, fontWeight: '700', lineHeight: 12 },
+    timerChip: { paddingHorizontal: 14, paddingVertical: 8 },
+    chipActive: { backgroundColor: t.accent, borderColor: t.accent },
+    chipText: { color: t.textSecondary, fontSize: 14, fontWeight: '600' },
+    chipTextActive: { color: t.accentText },
+
+    presetHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22, marginBottom: 10 },
+    pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+    pickerSheet: { backgroundColor: t.bgAlt, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 10, paddingBottom: 40, paddingHorizontal: 22 },
+    pickerHandle: { width: 36, height: 5, borderRadius: 3, backgroundColor: t.surfaceBorder, alignSelf: 'center', marginBottom: 18 },
+    pickerHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+    pickerHeaderTitle: { color: t.textPrimary, fontSize: 24, fontWeight: '700' },
+    pickerCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: t.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    pickerCloseText: { color: t.textSecondary, fontSize: 15, fontWeight: '700' },
+    pickerTabs: { flexDirection: 'row', backgroundColor: t.bg, borderRadius: 14, padding: 4, gap: 4, marginBottom: 8 },
+    pickerTab: { flex: 1, paddingVertical: 12, borderRadius: 11, alignItems: 'center' },
+    pickerTabActive: { backgroundColor: t.surfaceAlt },
+    pickerTabText: { color: t.textSecondary, fontSize: 15, fontWeight: '700' },
+    pickerTabTextActive: { color: t.textPrimary },
+    pickerWheel: { alignSelf: 'stretch', height: 190 },
+    pickerShutoff: { color: t.textSecondary, fontSize: 15, textAlign: 'center', marginTop: 4, marginBottom: 22 },
+    pickerStartBtn: { backgroundColor: t.accent, borderRadius: 16, paddingVertical: 17, alignItems: 'center' },
+    pickerStartText: { color: t.accentText, fontSize: 17, fontWeight: '700' },
+    saveLink: { color: t.accent, fontSize: 13, fontWeight: '700' },
+    emptyPresets: { color: t.textSecondary, fontSize: 13, lineHeight: 18 },
+
+    foot: { color: t.textFaint, fontSize: 10.5, textAlign: 'center', marginTop: 26, fontStyle: 'italic', lineHeight: 15, letterSpacing: 0.2 },
+
+    settingsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+    settingsTextBlock: { flex: 1, paddingRight: 16 },
+    settingsLabel: { color: t.textPrimary, fontSize: 15, fontWeight: '600' },
+    settingsHint: { color: t.textSecondary, fontSize: 12, marginTop: 2, lineHeight: 16 },
+    themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
+    themeSwatchWrap: { alignItems: 'center', gap: 6 },
+    themeSwatch: {
+      width: 44, height: 44, borderRadius: 22,
+      borderWidth: 2, borderColor: 'transparent',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    themeSwatchActive: { borderColor: t.textPrimary },
+    themeSwatchInner: { width: 34, height: 34, borderRadius: 17 },
+    themeSwatchLabel: { color: t.textSecondary, fontSize: 10, maxWidth: 60, textAlign: 'center' },
+  });
+}
