@@ -335,7 +335,14 @@ function oceanGenerator() {
     swellStepsLeft -= 1;
     swellCurrent += (swellTarget - swellCurrent) * 0.00002;
     const swell = swellCurrent;
-    if (foamEnv <= 0.001 && swell > 0.92 && Math.random() < 0.0015) {
+    // Was 0.0015/sample - the old sine swell only briefly crossed 0.92 near
+    // each peak, so this rate was masked. The new slow-chase swell can
+    // linger above 0.92 for many seconds at a stretch, and at 44.1kHz
+    // 0.0015/sample averages ~66 triggers/SECOND while lingering - a rapid
+    // machine-gun of foam clicks instead of an occasional swish. Dropped
+    // ~500x to average roughly one foam burst per several seconds of
+    // being in the high part of the swell.
+    if (foamEnv <= 0.001 && swell > 0.92 && Math.random() < 0.000003) {
       foamEnv = 0.4;
     }
     const foam = foamEnv * (Math.random() * 2 - 1);
