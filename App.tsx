@@ -102,6 +102,23 @@ const DEFAULT_VOLUME = 0.7;
 const FADE_SECONDS = 5;
 const STORAGE_KEY = 'quietroom:config:v2';
 
+// expo-av's `isLooping` restarts a clip via AVPlayer seeking back to 0,
+// which is not sample-accurate — it produces exactly the audible
+// gap-then-click at the loop point that this whole scheme exists to
+// avoid. Instead we run two alternating instances of the same (already
+// internally loop-safe) file per track and crossfade between them well
+// before either one reaches its natural end, so any restart artifact is
+// masked under the overlap. Since the WAV content is stationary ambient
+// noise/tone (not a distinct melody), a fresh instance starting from its
+// own t=0 mid-crossfade is inaudible as a "jump" — only precise-enough
+// timing to always swap before the 24s hard end matters, not exact
+// alignment to a particular sample.
+const LOOP_MS = DURATION_SEC * 1000;
+const LOOP_CROSSFADE_MS = 1000;
+// Swap starts this long before the clip's natural end, leaving a safety
+// margin after the crossfade completes in case of JS timer/setup jitter.
+const SWAP_LEAD_MS = LOOP_CROSSFADE_MS + 1500;
+
 function writeStr(view: DataView, off: number, s: string) {
   for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
 }
@@ -603,6 +620,11 @@ async function ensureSampleFile(kind: SoundKind): Promise<string> {
 
 type Mix = Partial<Record<SoundKind, number>>;
 type Preset = { id: string; name: string; mix: Mix };
+type TrackHandle = {
+  current: Audio.Sound;
+  targetVolume: number;
+  swapTimer: ReturnType<typeof setTimeout> | null;
+};
 
 export default function App() {
   useKeepAwake();
@@ -624,11 +646,15 @@ export default function App() {
   const [langKey, setLangKey] = useState<LangKey>('en');
   const [showSettings, setShowSettings] = useState(false);
   const hapticsEnabledRef = useRef(true);
-  const soundsRef = useRef<Map<SoundKind, Audio.Sound>>(new Map());
-  // Bumped on every stop/timer-invalidation; in-flight loads compare
-  // against it on resolve and discard themselves if it has moved on,
-  // so a stale createAsync can't resurrect an orphaned looping sound.
-  const genTokenRef = useRef(0);
+  // Each active track alternates between two Audio.Sound instances of the
+  // same file to loop gaplessly (see LOOP_MS/LOOP_CROSSFADE_MS above) -
+  // `current` is whichever instance is presently audible.
+  const tracksRef = useRef<Map<SoundKind, TrackHandle>>(new Map());
+  // Per-track generation counter. Bumped on remove/stop; any in-flight
+  // swap or fade-in compares its captured generation before touching
+  // shared state, so a stale async callback can't resurrect a track
+  // that's since been removed or resurface after a fresh restart.
+  const trackGenRef = useRef<Map<SoundKind, number>>(new Map());
 
   useEffect(() => {
     (async () => {
@@ -651,7 +677,10 @@ export default function App() {
       } catch {}
     })();
     return () => {
-      soundsRef.current.forEach((s) => s.unloadAsync().catch(() => {}));
+      tracksRef.current.forEach((handle) => {
+        if (handle.swapTimer) clearTimeout(handle.swapTimer);
+        handle.current.unloadAsync().catch(() => {});
+      });
     };
   }, []);
 
@@ -702,45 +731,51 @@ export default function App() {
   const STOP_FADE_STEPS = 10;
 
   const stop = useCallback(async () => {
-    genTokenRef.current += 1;
-    const entries = Array.from(soundsRef.current.entries());
-    soundsRef.current.clear();
+    const entries = Array.from(tracksRef.current.entries());
+    // Bump every active track's generation so any in-flight swap/fade-in
+    // detects it's stale and cleans up its own instances instead of
+    // resurfacing after we've already torn everything down.
+    entries.forEach(([k]) => trackGenRef.current.set(k, (trackGenRef.current.get(k) ?? 0) + 1));
+    tracksRef.current.clear();
+    entries.forEach(([, handle]) => {
+      if (handle.swapTimer) clearTimeout(handle.swapTimer);
+    });
     setBusyCount((c) => c + 1);
 
     // Fade every active track down to silence before actually stopping —
     // makes even a manual stop feel gentle instead of an abrupt cutoff.
     const startVols = new Map<string, number>();
     await Promise.all(
-      entries.map(async ([k, s]) => {
+      entries.map(async ([k, handle]) => {
         try {
-          const status = await s.getStatusAsync();
-          startVols.set(k, status.isLoaded ? status.volume ?? 0 : mix[k] ?? DEFAULT_VOLUME);
+          const status = await handle.current.getStatusAsync();
+          startVols.set(k, status.isLoaded ? status.volume ?? 0 : handle.targetVolume);
         } catch {
-          startVols.set(k, mix[k] ?? DEFAULT_VOLUME);
+          startVols.set(k, handle.targetVolume);
         }
       }),
     );
     for (let step = 1; step <= STOP_FADE_STEPS; step++) {
       const factor = 1 - step / STOP_FADE_STEPS;
       await Promise.all(
-        entries.map(([k, s]) => s.setVolumeAsync((startVols.get(k) ?? 0) * factor).catch(() => {})),
+        entries.map(([k, handle]) => handle.current.setVolumeAsync((startVols.get(k) ?? 0) * factor).catch(() => {})),
       );
       await new Promise((r) => setTimeout(r, STOP_FADE_MS / STOP_FADE_STEPS));
     }
 
     await Promise.all(
-      entries.map(([, s]) =>
-        s
+      entries.map(([, handle]) =>
+        handle.current
           .stopAsync()
           .catch(() => {})
-          .then(() => s.unloadAsync().catch(() => {})),
+          .then(() => handle.current.unloadAsync().catch(() => {})),
       ),
     );
     setPlaying(false);
     setTimerEnds(null);
     setBusyCount((c) => Math.max(0, c - 1));
     hapticImpact(Haptics.ImpactFeedbackStyle.Light);
-  }, [mix]);
+  }, []);
 
   // Auto fade-out + stop on timer expiry
   useEffect(() => {
@@ -752,36 +787,94 @@ export default function App() {
     }
     if (remainingSec <= FADE_SECONDS) {
       const factor = Math.max(0, remainingSec / FADE_SECONDS);
-      soundsRef.current.forEach((s, k) => {
+      tracksRef.current.forEach((handle, k) => {
         const vol = mix[k] ?? DEFAULT_VOLUME;
-        s.setVolumeAsync(vol * factor).catch(() => {});
+        handle.current.setVolumeAsync(vol * factor).catch(() => {});
       });
     }
   }, [now, timerEnds, playing, stop, mix]);
 
-  const ensureTrackPlaying = useCallback(async (k: SoundKind, vol: number) => {
-    const existing = soundsRef.current.get(k);
-    if (existing) {
-      await existing.setVolumeAsync(vol).catch(() => {});
+  // Crossfades a track's currently-audible instance over to a freshly
+  // created one of the same (loop-safe) file, then tears down the old
+  // instance — see the LOOP_MS/LOOP_CROSSFADE_MS comment above for why
+  // this exists instead of `isLooping: true`. Each new instance arms its
+  // own next swap relative to its own real start time, so timing never
+  // compounds across cycles even if a given cycle's setup was a bit slow.
+  const performSwap = useCallback(async (k: SoundKind, generation: number) => {
+    if (trackGenRef.current.get(k) !== generation) return;
+    const handle = tracksRef.current.get(k);
+    if (!handle) return;
+    let path: string;
+    try {
+      path = await ensureSampleFile(k);
+    } catch (e) {
+      console.warn('Swap failed to resolve sample', k, e);
       return;
     }
-    const myToken = genTokenRef.current;
+    if (trackGenRef.current.get(k) !== generation) return;
+    let nextSound: Audio.Sound;
+    try {
+      const created = await Audio.Sound.createAsync({ uri: path }, { shouldPlay: true, isLooping: false, volume: 0 });
+      nextSound = created.sound;
+    } catch (e) {
+      console.warn('Swap failed to create next instance', k, e);
+      return;
+    }
+    if (trackGenRef.current.get(k) !== generation) {
+      await nextSound.unloadAsync().catch(() => {});
+      return;
+    }
+    const oldSound = handle.current;
+    handle.current = nextSound;
+    // Armed immediately, relative to nextSound's own true start - not to
+    // when this crossfade ramp happens to finish.
+    handle.swapTimer = setTimeout(() => performSwap(k, generation), LOOP_MS - SWAP_LEAD_MS);
+
+    const steps = 12;
+    for (let step = 1; step <= steps; step++) {
+      if (trackGenRef.current.get(k) !== generation) {
+        if (handle.swapTimer) clearTimeout(handle.swapTimer);
+        await Promise.all([oldSound.unloadAsync().catch(() => {}), nextSound.unloadAsync().catch(() => {})]);
+        return;
+      }
+      const frac = step / steps;
+      const vol = tracksRef.current.get(k)?.targetVolume ?? handle.targetVolume;
+      await Promise.all([
+        oldSound.setVolumeAsync(vol * (1 - frac)).catch(() => {}),
+        nextSound.setVolumeAsync(vol * frac).catch(() => {}),
+      ]);
+      await new Promise((r) => setTimeout(r, LOOP_CROSSFADE_MS / steps));
+    }
+    await oldSound.stopAsync().catch(() => {});
+    await oldSound.unloadAsync().catch(() => {});
+  }, []);
+
+  const ensureTrackPlaying = useCallback(async (k: SoundKind, vol: number) => {
+    const existing = tracksRef.current.get(k);
+    if (existing) {
+      existing.targetVolume = vol;
+      existing.current.setVolumeAsync(vol).catch(() => {});
+      return;
+    }
+    const generation = (trackGenRef.current.get(k) ?? 0) + 1;
+    trackGenRef.current.set(k, generation);
     setBusyCount((c) => c + 1);
     try {
       const path = await ensureSampleFile(k);
-      if (genTokenRef.current !== myToken) return;
+      if (trackGenRef.current.get(k) !== generation) return;
       const { sound } = await Audio.Sound.createAsync(
         { uri: path },
-        { shouldPlay: true, isLooping: true, volume: 0 },
+        { shouldPlay: true, isLooping: false, volume: 0 },
       );
-      if (genTokenRef.current !== myToken) {
+      if (trackGenRef.current.get(k) !== generation) {
         await sound.unloadAsync().catch(() => {});
         return;
       }
-      soundsRef.current.set(k, sound);
+      const swapTimer = setTimeout(() => performSwap(k, generation), LOOP_MS - SWAP_LEAD_MS);
+      tracksRef.current.set(k, { current: sound, targetVolume: vol, swapTimer });
       const steps = 8;
       for (let step = 1; step <= steps; step++) {
-        if (genTokenRef.current !== myToken) return;
+        if (trackGenRef.current.get(k) !== generation) return;
         await sound.setVolumeAsync((vol * step) / steps).catch(() => {});
         await new Promise((r) => setTimeout(r, 400 / steps));
       }
@@ -790,14 +883,16 @@ export default function App() {
     } finally {
       setBusyCount((c) => Math.max(0, c - 1));
     }
-  }, []);
+  }, [performSwap]);
 
   const removeTrack = useCallback(async (k: SoundKind) => {
-    const s = soundsRef.current.get(k);
-    if (!s) return;
-    soundsRef.current.delete(k);
-    await s.stopAsync().catch(() => {});
-    await s.unloadAsync().catch(() => {});
+    const handle = tracksRef.current.get(k);
+    if (!handle) return;
+    trackGenRef.current.set(k, (trackGenRef.current.get(k) ?? 0) + 1);
+    tracksRef.current.delete(k);
+    if (handle.swapTimer) clearTimeout(handle.swapTimer);
+    await handle.current.stopAsync().catch(() => {});
+    await handle.current.unloadAsync().catch(() => {});
   }, []);
 
   const play = useCallback(
