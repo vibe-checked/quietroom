@@ -79,6 +79,31 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: Sound
   { kind: 'binaural_alpha', label: 'Binaural Alpha', tagline: 'Binaural alpha tone (10Hz) — wear headphones for the effect.', category: 'Binaural' },
 ];
 
+const SOUND_ICON: Record<SoundKind, string> = {
+  white: '📻',
+  pink: '🍃',
+  brown: '🌊',
+  rain: '🌧️',
+  ocean: '🌊',
+  wind: '🌬️',
+  campfire: '🔥',
+  thunder: '⛈️',
+  crickets: '🦗',
+  boxfan: '🌀',
+  towerfan: '💨',
+  ceilingfan: '🎡',
+  acunit: '❄️',
+  largefloorfan: '🌪️',
+  smalldeskfan: '🍃',
+  music_soothe: '🎵',
+  music_deepsleep: '😴',
+  music_ultrarelax: '✨',
+  music_healingcalm: '🕊️',
+  binaural_delta: '🎧',
+  binaural_theta: '🎧',
+  binaural_alpha: '🎧',
+};
+
 const SOUND_CATEGORIES: SoundCategory[] = ['Nature', 'Noise', 'Fans', 'Music', 'Binaural'];
 
 // Lock-screen artwork, one illustration per category plus a generic "Mix"
@@ -408,57 +433,97 @@ function campfireGenerator() {
   };
 }
 
-// Thunder: a slow, irregular rolling sub-bass rumble (built from several
-// overlapping low-frequency oscillators so it swells unevenly rather than
-// pulsing on a fixed beat) with occasional deeper booms — distinct from
-// wind's gusting and rain's patter.
+// Thunder: a heavy-rain background (real thunderstorms don't happen in
+// silence) under a slow, irregular rolling sub-bass rumble, with rare
+// multi-hit strikes - a few quick cracks building into one long, deep
+// boom ("don don don dooooon"), not a single isolated pop.
 function thunderGenerator() {
   const roll1Hz = loopHz(0.07);
   const roll2Hz = loopHz(0.13);
+  const rainWhite = whiteGenerator();
+  let rainHp = 0;
+  let rainLastW = 0;
+  let rainDropEnv = 0;
   let lp = 0;
   let mid = 0;
   let texture = 0;
   let t = 0;
   let boom = 0;
+  let bigBoom = 0;
   let crackEnv = 0;
   let crackPrev = 0;
+  let cooldown = 0;
+  const pendingHits: { delay: number; amp: number; big: boolean }[] = [];
   return () => {
     t += 1;
     const sec = t / SAMPLE_RATE;
     const w = Math.random() * 2 - 1;
-    // Was 0.997 (~21Hz cutoff) - almost entirely below what phone/laptop
-    // speakers can reproduce, which is why the rumble read as "weird and
-    // soft" instead of real. ~110Hz keeps it bass-heavy but audible.
+    // ~110Hz cutoff - audible bass, not the ~21Hz sub-bass that used to
+    // read as "weird and soft" on phone speakers.
     lp = lp * 0.985 + w * 0.015;
     // A second, higher band gives the gravelly "rolling" texture real
     // thunder has on top of the pure sub-bass.
     mid = mid * 0.93 + w * 0.07;
-    // A softer, mid-passed noise floor well below the rumble in level —
-    // present enough to avoid dead silence, quiet enough to stay a bass sound.
     texture = texture * 0.9 + w * 0.1;
+
+    // Heavy rain, always present - real thunderstorms have a constant
+    // downpour under the rumble, not silence between strikes.
+    const rw = rainWhite();
+    rainHp = rainHp * 0.7 + (rw - rainLastW) * 0.7;
+    rainLastW = rw;
+    if (rainDropEnv <= 0.002 && Math.random() < 0.012) {
+      rainDropEnv = 0.6 + Math.random() * 0.5;
+    }
+    const rainDrop = rainDropEnv * (Math.random() * 2 - 1);
+    rainDropEnv *= 0.65;
+    const heavyRain = rainHp * 1.5 + rainDrop * 0.4;
+
     const roll =
       0.5 +
       0.3 * Math.sin(sec * 2 * Math.PI * roll1Hz) +
       0.2 * Math.sin(sec * 2 * Math.PI * roll2Hz + 1.4);
-    // Was 0.0006/sample - at 44.1kHz that's a new clap roughly every 40ms,
-    // basically continuous crackling instead of the occasional distant
-    // clap real thunder actually is. ~0.0000012 averages one clap every
-    // ~19s, which is still a random (Poisson) interval, not a fixed one.
-    if (boom <= 0.002 && Math.random() < 0.0000012) {
-      boom = 0.85 + Math.random() * 0.4;
-      // Real thunder starts with a fast, bright strike, not a swelling
-      // rumble - give every boom a sharp crack at its onset.
-      crackEnv = 1;
+
+    // Real thunder rarely strikes just once - schedule a short burst of
+    // 2-4 quick claps ("don don don") followed by one longer, deeper
+    // boom ("dooooon"), then go quiet for 14-28s before the next strike.
+    if (cooldown <= 0 && Math.random() < 0.0000012) {
+      let cursor = 0;
+      const hits = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < hits; i++) {
+        cursor += Math.floor((0.12 + Math.random() * 0.1) * SAMPLE_RATE);
+        pendingHits.push({ delay: cursor, amp: 0.7 + Math.random() * 0.3, big: false });
+      }
+      cursor += Math.floor((0.25 + Math.random() * 0.15) * SAMPLE_RATE);
+      pendingHits.push({ delay: cursor, amp: 1.2, big: true });
+      cooldown = Math.floor((14 + Math.random() * 14) * SAMPLE_RATE);
     }
+    if (cooldown > 0) cooldown -= 1;
+    for (let i = pendingHits.length - 1; i >= 0; i--) {
+      const hit = pendingHits[i];
+      hit.delay -= 1;
+      if (hit.delay <= 0) {
+        if (hit.big) {
+          bigBoom = hit.amp;
+        } else {
+          boom = hit.amp;
+        }
+        crackEnv = hit.big ? 1.3 : 0.9;
+        pendingHits.splice(i, 1);
+      }
+    }
+    // Quick claps decay fast (~130ms); the final boom decays much slower
+    // (~700ms) so it actually reads as the long, deep "dooooon" tail.
     boom *= 0.9992;
+    bigBoom *= 0.99985;
     // First-difference high-pass for the crack - broadband and bright so
     // the onset actually snaps instead of just fading in like the rumble.
     const crackHp = w - crackPrev;
     crackPrev = w;
     const crack = crackEnv * crackHp;
     crackEnv *= 0.9975;
-    const rumble = lp * 9 * Math.max(0.15, roll) + lp * boom * 8 + mid * boom * 3;
-    return rumble + texture * 0.18 + crack * 1.4;
+    const rumble =
+      lp * 9 * Math.max(0.15, roll) + lp * (boom + bigBoom) * 8 + mid * (boom + bigBoom) * 3;
+    return rumble + texture * 0.18 + crack * 1.8 + heavyRain * 0.65;
   };
 }
 
@@ -1242,7 +1307,10 @@ export default function App() {
           pressed && { opacity: 0.9 },
         ]}
       >
-        <Text style={[styles.tileText, active && styles.tileTextActive]}>{i18nSound.label}</Text>
+        <View style={styles.tileLabelRow}>
+          <Text style={styles.tileIcon}>{SOUND_ICON[s.kind]}</Text>
+          <Text style={[styles.tileText, active && styles.tileTextActive]}>{i18nSound.label}</Text>
+        </View>
         {active && (
           <Slider
             style={styles.tileSlider}
@@ -1866,6 +1934,8 @@ function makeStyles(t: Theme) {
       justifyContent: 'center',
     },
     tileActive: { backgroundColor: t.accent, borderColor: t.accent },
+    tileLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    tileIcon: { fontSize: 18 },
     tileText: { color: t.textSecondary, fontSize: 15, fontWeight: '600' },
     tileTextActive: { color: t.accentText },
     tileSlider: { width: '100%', height: 28, marginTop: 4 },
