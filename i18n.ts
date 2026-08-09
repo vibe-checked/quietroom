@@ -198,12 +198,12 @@ export const SOUND_I18N: Record<SoundKindI18n, Record<LangKey, { label: string; 
     ja: { label: 'シーリングファン', tagline: '低くゆったりとした回転音と、羽根の微かな揺らぎ。' },
   },
   acunit: {
-    en: { label: 'Window AC', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.' },
+    en: { label: 'Air Conditioner', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.' },
     es: { label: 'Aire acondicionado', tagline: 'Zumbido de compresor — fresco, constante, algo vibrante.' },
     pt: { label: 'Ar-condicionado', tagline: 'Zumbido de compressor — frio, constante, um pouco vibrante.' },
     de: { label: 'Klimaanlage', tagline: 'Rasselndes Kompressorbrummen — kühl, stetig, leicht surrend.' },
     fr: { label: 'Climatiseur', tagline: 'Un ronron de compresseur — frais, régulier, un peu vibrant.' },
-    ja: { label: '窓用エアコン', tagline: 'ガタつくコンプレッサー音。涼しく安定した低いうなり。' },
+    ja: { label: 'エアコン', tagline: 'ガタつくコンプレッサー音。涼しく安定した低いうなり。' },
   },
   largefloorfan: {
     en: { label: 'Large Floor Fan', tagline: 'A big standing fan — deep, powerful, moving a lot of air.' },

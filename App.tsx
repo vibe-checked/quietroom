@@ -67,7 +67,7 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: Sound
   { kind: 'boxfan', label: 'Box Fan', tagline: 'The classic bedroom box fan — steady hum and moving air.', category: 'Fans' },
   { kind: 'towerfan', label: 'Tower Fan', tagline: 'Smoother, airier whoosh — less motor, more breeze.', category: 'Fans' },
   { kind: 'ceilingfan', label: 'Ceiling Fan', tagline: 'Deep, slow-turning hum with a gentle blade flutter.', category: 'Fans' },
-  { kind: 'acunit', label: 'Window AC', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.', category: 'Fans' },
+  { kind: 'acunit', label: 'Air Conditioner', tagline: 'A rattly compressor drone — cool, steady, a little buzzy.', category: 'Fans' },
   { kind: 'largefloorfan', label: 'Large Floor Fan', tagline: 'A big standing fan — deep, powerful, moving a lot of air.', category: 'Fans' },
   { kind: 'smalldeskfan', label: 'Small Desk Fan', tagline: 'A small, higher-pitched motor whir close by.', category: 'Fans' },
   { kind: 'music_soothe', label: 'Soothe', tagline: 'A soft, warm pad — gentle and unhurried.', category: 'Music' },
@@ -80,9 +80,12 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: Sound
 ];
 
 const SOUND_ICON: Record<SoundKind, string> = {
-  white: '📻',
-  pink: '🍃',
-  brown: '🌊',
+  // White/Pink/Brown are named after colors, not real-world objects, so a
+  // color-coded icon reads clearer than a literal (and often confusing)
+  // metaphor - it just says "this is the pink one."
+  white: '⚪',
+  pink: '🌸',
+  brown: '🟤',
   rain: '🌧️',
   ocean: '🌊',
   wind: '🌬️',
@@ -91,10 +94,10 @@ const SOUND_ICON: Record<SoundKind, string> = {
   crickets: '🦗',
   boxfan: '🌀',
   towerfan: '💨',
-  ceilingfan: '🎡',
+  ceilingfan: '🪭',
   acunit: '❄️',
   largefloorfan: '🌪️',
-  smalldeskfan: '🍃',
+  smalldeskfan: '🌬️',
   music_soothe: '🎵',
   music_deepsleep: '😴',
   music_ultrarelax: '✨',
@@ -347,19 +350,26 @@ function oceanGenerator() {
   // period does this, no matter how subtle the depth. The fix is to never
   // have one: chase a randomly-picked target level every few seconds
   // instead of oscillating, so the amplitude wanders but never repeats.
-  let swellCurrent = 0.9;
-  let swellTarget = 0.9;
+  let swellCurrent = 0.7;
+  let swellTarget = 0.7;
   let swellStepsLeft = 0;
   return () => {
     const base = pink();
     lp = lp * 0.9 + base * 0.1;
     if (swellStepsLeft <= 0) {
-      swellTarget = 0.8 + Math.random() * 0.2;
-      swellStepsLeft = Math.floor((3 + Math.random() * 5) * SAMPLE_RATE);
+      // Was 0.8-1.0 - too narrow to actually hear a rise and fall, which
+      // is why it stopped sounding like waves at all. Wide range plus a
+      // faster chase gives a clearly audible swell; it stays aperiodic
+      // (never a "don don don") because the target and interval are both
+      // re-randomized independently every cycle, so no period repeats.
+      swellTarget = 0.35 + Math.random() * 0.65;
+      swellStepsLeft = Math.floor((2.5 + Math.random() * 4.5) * SAMPLE_RATE);
     }
     swellStepsLeft -= 1;
-    swellCurrent += (swellTarget - swellCurrent) * 0.00002;
-    const swell = swellCurrent;
+    swellCurrent += (swellTarget - swellCurrent) * 0.00005;
+    // A little crest emphasis - a wave's peak surges more than its trough
+    // recedes - applied to the aperiodic chase, not a fixed oscillation.
+    const swell = Math.pow(Math.max(0, swellCurrent), 1.3);
     // Was 0.0015/sample - the old sine swell only briefly crossed 0.92 near
     // each peak, so this rate was masked. The new slow-chase swell can
     // linger above 0.92 for many seconds at a stretch, and at 44.1kHz
@@ -367,17 +377,16 @@ function oceanGenerator() {
     // machine-gun of foam clicks instead of an occasional swish. Dropped
     // ~500x to average roughly one foam burst per several seconds of
     // being in the high part of the swell.
-    if (foamEnv <= 0.001 && swell > 0.92 && Math.random() < 0.000003) {
+    if (foamEnv <= 0.001 && swell > 0.85 && Math.random() < 0.000004) {
       foamEnv = 0.4;
     }
     const foam = foamEnv * (Math.random() * 2 - 1);
     foamEnv *= 0.9996;
-    // The low-passed bass component used to be boosted hard (2.6x) and
-    // paired with a peaky swell curve, which produced an audible bass
-    // pulse every ~5s ("don don don") instead of continuous surf. Bass
-    // gain is way down and the broadband wash now carries the sound.
-    const wash = base * 0.6 * swell;
-    return lp * 0.9 * swell + wash + foam * 0.5;
+    // Bass and wash both track the swell more strongly now so the rise
+    // and fall is actually audible as a wave, not just a faint texture
+    // shift.
+    const wash = base * 0.85 * swell;
+    return lp * 1.8 * swell + wash + foam * 0.5;
   };
 }
 
@@ -449,11 +458,14 @@ function thunderGenerator() {
   let texture = 0;
   let t = 0;
   let boom = 0;
-  let bigBoom = 0;
-  let crackEnv = 0;
-  let crackPrev = 0;
-  let cooldown = 0;
-  const pendingHits: { delay: number; amp: number; big: boolean }[] = [];
+  let zapEnv = 0;
+  let zapPrev1 = 0;
+  let zapPrev2 = 0;
+  // Was 14-28s between strikes - too rare. ~8-18s is more frequent while
+  // still irregular (each cooldown draw is random, so the interval never
+  // repeats on a fixed beat).
+  let cooldown = Math.floor((2 + Math.random() * 3) * SAMPLE_RATE);
+  const echoes: { delay: number; amp: number }[] = [];
   return () => {
     t += 1;
     const sec = t / SAMPLE_RATE;
@@ -483,47 +495,48 @@ function thunderGenerator() {
       0.3 * Math.sin(sec * 2 * Math.PI * roll1Hz) +
       0.2 * Math.sin(sec * 2 * Math.PI * roll2Hz + 1.4);
 
-    // Real thunder rarely strikes just once - schedule a short burst of
-    // 2-4 quick claps ("don don don") followed by one longer, deeper
-    // boom ("dooooon"), then go quiet for 14-28s before the next strike.
-    if (cooldown <= 0 && Math.random() < 0.0000012) {
+    if (cooldown <= 0) {
+      // A real strike is ONE quick, bright zap - not several separate
+      // claps - immediately followed by a big rumble that rolls and
+      // echoes across the sky for several seconds. Model the echo as a
+      // few delayed, decaying repeats close enough together that they
+      // overlap into one continuous rolling boom instead of sounding
+      // like distinct hits.
+      zapEnv = 1;
+      echoes.length = 0;
       let cursor = 0;
-      const hits = 2 + Math.floor(Math.random() * 3);
-      for (let i = 0; i < hits; i++) {
-        cursor += Math.floor((0.12 + Math.random() * 0.1) * SAMPLE_RATE);
-        pendingHits.push({ delay: cursor, amp: 0.7 + Math.random() * 0.3, big: false });
+      const echoCount = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < echoCount; i++) {
+        cursor += Math.floor((0.25 + Math.random() * 0.35) * SAMPLE_RATE);
+        echoes.push({ delay: cursor, amp: Math.pow(0.75, i) });
       }
-      cursor += Math.floor((0.25 + Math.random() * 0.15) * SAMPLE_RATE);
-      pendingHits.push({ delay: cursor, amp: 1.2, big: true });
-      cooldown = Math.floor((14 + Math.random() * 14) * SAMPLE_RATE);
+      cooldown = Math.floor((8 + Math.random() * 10) * SAMPLE_RATE);
     }
-    if (cooldown > 0) cooldown -= 1;
-    for (let i = pendingHits.length - 1; i >= 0; i--) {
-      const hit = pendingHits[i];
-      hit.delay -= 1;
-      if (hit.delay <= 0) {
-        if (hit.big) {
-          bigBoom = hit.amp;
-        } else {
-          boom = hit.amp;
-        }
-        crackEnv = hit.big ? 1.3 : 0.9;
-        pendingHits.splice(i, 1);
+    cooldown -= 1;
+    for (let i = echoes.length - 1; i >= 0; i--) {
+      echoes[i].delay -= 1;
+      if (echoes[i].delay <= 0) {
+        boom = Math.max(boom, echoes[i].amp);
+        echoes.splice(i, 1);
       }
     }
-    // Quick claps decay fast (~130ms); the final boom decays much slower
-    // (~700ms) so it actually reads as the long, deep "dooooon" tail.
-    boom *= 0.9992;
-    bigBoom *= 0.99985;
-    // First-difference high-pass for the crack - broadband and bright so
-    // the onset actually snaps instead of just fading in like the rumble.
-    const crackHp = w - crackPrev;
-    crackPrev = w;
-    const crack = crackEnv * crackHp;
-    crackEnv *= 0.9975;
-    const rumble =
-      lp * 9 * Math.max(0.15, roll) + lp * (boom + bigBoom) * 8 + mid * (boom + bigBoom) * 3;
-    return rumble + texture * 0.18 + crack * 1.8 + heavyRain * 0.65;
+    // ~4s to decay to 1% - long enough that successive echoes land while
+    // the previous one is still ringing, blending into one continuous
+    // rolling/echoing rumble rather than separate claps.
+    boom *= 0.999975;
+
+    // The zap: a fast, bright double-differenced noise burst (like
+    // campfire's crack, but sharper and shorter) - the "lightning" sound,
+    // distinct from the long rumble that follows it.
+    const d1 = w - zapPrev1;
+    zapPrev1 = w;
+    const d2 = d1 - zapPrev2;
+    zapPrev2 = d1;
+    const zap = zapEnv * d2;
+    zapEnv *= 0.55;
+
+    const rumble = lp * 2.5 * Math.max(0.15, roll) + lp * 10 * boom + mid * boom * 4;
+    return rumble + texture * 0.15 + zap * 2.2 + heavyRain * 0.65;
   };
 }
 
