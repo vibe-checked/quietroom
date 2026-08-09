@@ -63,7 +63,7 @@ const SOUNDS: { kind: SoundKind; label: string; tagline: string; category: Sound
   { kind: 'wind', label: 'Wind', tagline: 'Gusting air moving through open space.', category: 'Nature' },
   { kind: 'campfire', label: 'Campfire', tagline: 'Warm crackle and pop of a low fire.', category: 'Nature' },
   { kind: 'thunder', label: 'Thunder', tagline: 'Distant rolling rumble beneath a steady rain.', category: 'Nature' },
-  { kind: 'crickets', label: 'Night', tagline: 'Quiet dark with a chorus of distant crickets.', category: 'Nature' },
+  { kind: 'crickets', label: 'Crickets', tagline: 'Quiet dark with a chorus of distant crickets.', category: 'Nature' },
   { kind: 'boxfan', label: 'Box Fan', tagline: 'The classic bedroom box fan — steady hum and moving air.', category: 'Fans' },
   { kind: 'towerfan', label: 'Tower Fan', tagline: 'Smoother, airier whoosh — less motor, more breeze.', category: 'Fans' },
   { kind: 'ceilingfan', label: 'Ceiling Fan', tagline: 'Deep, slow-turning hum with a gentle blade flutter.', category: 'Fans' },

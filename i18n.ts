@@ -222,12 +222,12 @@ export const SOUND_I18N: Record<SoundKindI18n, Record<LangKey, { label: string; 
     ja: { label: '小型デスクファン', tagline: '近くで鳴る、小さく高めのモーター音。' },
   },
   crickets: {
-    en: { label: 'Night', tagline: 'Quiet dark with a chorus of distant crickets.' },
-    es: { label: 'Noche', tagline: 'Oscuridad silenciosa con un coro de grillos lejanos.' },
-    pt: { label: 'Noite', tagline: 'Escuridão silenciosa com um coro de grilos distantes.' },
-    de: { label: 'Nacht', tagline: 'Stille Dunkelheit mit fernem Grillenchor.' },
-    fr: { label: 'Nuit', tagline: 'Une obscurité silencieuse avec un chœur de grillons.' },
-    ja: { label: '夜', tagline: '静かな闇に響く、遠くのコオロギの合唱。' },
+    en: { label: 'Crickets', tagline: 'Quiet dark with a chorus of distant crickets.' },
+    es: { label: 'Grillos', tagline: 'Oscuridad silenciosa con un coro de grillos lejanos.' },
+    pt: { label: 'Grilos', tagline: 'Escuridão silenciosa com um coro de grilos distantes.' },
+    de: { label: 'Grillen', tagline: 'Stille Dunkelheit mit fernem Grillenchor.' },
+    fr: { label: 'Grillons', tagline: 'Une obscurité silencieuse avec un chœur de grillons.' },
+    ja: { label: 'コオロギ', tagline: '静かな闇に響く、遠くのコオロギの合唱。' },
   },
   music_soothe: {
     en: { label: 'Soothe', tagline: 'A soft, warm pad — gentle and unhurried.' },
