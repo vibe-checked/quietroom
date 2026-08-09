@@ -113,7 +113,10 @@ function writeStr(view: DataView, off: number, s: string) {
 // ~0.38, music pads ~0.5 — both now pass through byte-for-byte exact).
 // Generators still occasionally peak past +-1 by design (pops, booms);
 // only those get the smooth tanh compression.
-const SOFT_KNEE = 0.7;
+// Raised from 0.7: transient realism (campfire pops, thunder booms) matters
+// more than avoiding an occasional soft-clipped peak - only compress once a
+// sample is genuinely running hot, not the normal top of its dynamic range.
+const SOFT_KNEE = 0.92;
 function softClip(x: number): number {
   const ax = Math.abs(x);
   if (ax <= SOFT_KNEE) return x;
@@ -288,9 +291,9 @@ function windGenerator() {
     const sec = t / SAMPLE_RATE;
     const gust = 0.4 + 0.6 * Math.pow((1 + Math.sin(sec * 2 * Math.PI * 0.22)) / 2, 2);
     const hiss = white() * 0.3 * gust;
-    // Was base*(0.5+gust), peaking at 1.5x base during strong gusts -
-    // trimmed the gust ceiling slightly so peak gusts don't overshoot.
-    return base * (0.45 + gust * 0.9) + hiss;
+    // A strong gust should actually sound stronger - let it peak above the
+    // resting level rather than capping it for the sake of a flatter meter.
+    return base * (0.5 + gust) + hiss;
   };
 }
 
@@ -309,12 +312,10 @@ function campfireGenerator() {
     }
     const pop = popEnv * (Math.random() * 2 - 1);
     popEnv *= 0.8;
-    // Pops are broadband/white-ish clicks, same as rain's drops - at full
-    // strength they pulled campfire's whole spectral identity toward
-    // "generic white click track" (0.90 similar to rain). Sharp
-    // transients still read as audible pops even toned down, thanks to
-    // their attack, so the warm base now carries campfire's identity.
-    return base + pop * 0.4;
+    // Pops need to be loud and sharp to read as a real fire - a quiet pop
+    // isn't a pop. The warm pink/brown base still carries campfire's
+    // identity at rest; the pops are allowed to punch well above it.
+    return base + pop * 0.9;
   };
 }
 
@@ -340,10 +341,10 @@ function thunderGenerator() {
       0.3 * Math.sin(sec * 2 * Math.PI * 0.07) +
       0.2 * Math.sin(sec * 2 * Math.PI * 0.13 + 1.4);
     if (boom <= 0.002 && Math.random() < 0.0006) {
-      boom = 0.7 + Math.random() * 0.3;
+      boom = 0.85 + Math.random() * 0.4;
     }
     boom *= 0.9992;
-    const rumble = lp * 8 * Math.max(0.15, roll) + lp * boom * 4;
+    const rumble = lp * 8 * Math.max(0.15, roll) + lp * boom * 7;
     return rumble + texture * 0.16;
   };
 }
@@ -1341,6 +1342,21 @@ type Theme = {
 
 const THEMES: Theme[] = [
   {
+    key: 'ember',
+    name: 'Warm Ember',
+    bg: '#180f0a',
+    bgAlt: '#241811',
+    surface: '#2b1c13',
+    surfaceBorder: '#47301f',
+    surfaceAlt: '#382417',
+    accent: '#d99a52',
+    accentText: '#180f0a',
+    textPrimary: '#f3e6d8',
+    textSecondary: '#cba382',
+    textTertiary: '#8a6a51',
+    textFaint: '#5c4736',
+  },
+  {
     key: 'teal',
     name: 'Midnight Teal',
     bg: '#0d1518',
@@ -1386,21 +1402,6 @@ const THEMES: Theme[] = [
     textFaint: '#3c5747',
   },
   {
-    key: 'ember',
-    name: 'Warm Ember',
-    bg: '#180f0a',
-    bgAlt: '#241811',
-    surface: '#2b1c13',
-    surfaceBorder: '#47301f',
-    surfaceAlt: '#382417',
-    accent: '#d99a52',
-    accentText: '#180f0a',
-    textPrimary: '#f3e6d8',
-    textSecondary: '#cba382',
-    textTertiary: '#8a6a51',
-    textFaint: '#5c4736',
-  },
-  {
     key: 'ocean',
     name: 'Ocean Depth',
     bg: '#091420',
@@ -1416,7 +1417,7 @@ const THEMES: Theme[] = [
     textFaint: '#3c5764',
   },
 ];
-const DEFAULT_THEME_KEY = 'teal';
+const DEFAULT_THEME_KEY = 'ember';
 
 function makeStyles(t: Theme) {
   return StyleSheet.create({
