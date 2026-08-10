@@ -910,6 +910,7 @@ export default function App() {
   const [timerEnds, setTimerEnds] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
   const [keepPlayingInBackground, setKeepPlayingInBackground] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [themeKey, setThemeKey] = useState(DEFAULT_THEME_KEY);
@@ -940,6 +941,7 @@ export default function App() {
           if (typeof c.timerMin === 'number') setTimerMin(c.timerMin);
           if (typeof c.customTimerMin === 'number') setCustomTimerMin(c.customTimerMin);
           if (Array.isArray(c.presets)) setPresets(c.presets);
+          if (typeof c.autoPlayEnabled === 'boolean') setAutoPlayEnabled(c.autoPlayEnabled);
           if (typeof c.keepPlayingInBackground === 'boolean') setKeepPlayingInBackground(c.keepPlayingInBackground);
           if (typeof c.hapticsEnabled === 'boolean') {
             setHapticsEnabled(c.hapticsEnabled);
@@ -988,9 +990,9 @@ export default function App() {
   useEffect(() => {
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey, popularKinds }),
+      JSON.stringify({ mix, timerMin, customTimerMin, presets, autoPlayEnabled, keepPlayingInBackground, hapticsEnabled, themeKey, langKey, popularKinds }),
     ).catch(() => {});
-  }, [mix, timerMin, customTimerMin, presets, keepPlayingInBackground, hapticsEnabled, themeKey, langKey, popularKinds]);
+  }, [mix, timerMin, customTimerMin, presets, autoPlayEnabled, keepPlayingInBackground, hapticsEnabled, themeKey, langKey, popularKinds]);
 
   const theme = useMemo(() => THEMES.find((th) => th.key === themeKey) ?? THEMES[0], [themeKey]);
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -1210,13 +1212,18 @@ export default function App() {
     (k: SoundKind) => {
       hapticSelection();
       const turningOn = !((mix[k] ?? 0) > 0);
-      setMix((prev) => ({ ...prev, [k]: turningOn ? DEFAULT_VOLUME : 0 }));
+      const nextMix = { ...mix, [k]: turningOn ? DEFAULT_VOLUME : 0 };
+      setMix(nextMix);
       if (playing) {
         if (turningOn) ensureTrackPlaying(k, DEFAULT_VOLUME);
         else removeTrack(k);
+      } else if (turningOn && autoPlayEnabled) {
+        // With Auto Play on, picking a sound starts it right away - no
+        // separate tap on the play button needed.
+        play(nextMix);
       }
     },
-    [mix, playing, ensureTrackPlaying, removeTrack],
+    [mix, playing, autoPlayEnabled, ensureTrackPlaying, removeTrack, play],
   );
 
   const togglePopular = useCallback((k: SoundKind) => {
@@ -1409,6 +1416,22 @@ export default function App() {
 
         <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
           <View style={styles.bottom}>
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsTextBlock}>
+                <Text style={styles.settingsLabel}>{t(langKey, 'settingsAutoPlayLabel')}</Text>
+                <Text style={styles.settingsHint}>{t(langKey, 'settingsAutoPlayHint')}</Text>
+              </View>
+              <Switch
+                value={autoPlayEnabled}
+                onValueChange={(v) => {
+                  hapticSelection();
+                  setAutoPlayEnabled(v);
+                }}
+                trackColor={{ false: theme.surfaceBorder, true: theme.accent }}
+                thumbColor={theme.textPrimary}
+              />
+            </View>
+
             <View style={styles.settingsRow}>
               <View style={styles.settingsTextBlock}>
                 <Text style={styles.settingsLabel}>{t(langKey, 'settingsBackgroundLabel')}</Text>

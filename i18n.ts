@@ -44,6 +44,8 @@ type UiKey =
   | 'emptyPresetsHint'
   | 'footer'
   | 'settingsSectionLabel'
+  | 'settingsAutoPlayLabel'
+  | 'settingsAutoPlayHint'
   | 'settingsBackgroundLabel'
   | 'settingsBackgroundHint'
   | 'settingsHapticsLabel'
@@ -88,6 +90,8 @@ export const UI: Record<UiKey, Record<LangKey, string>> = {
   emptyPresetsHint: { en: 'Build a mix above, then save it here for later.', es: 'Crea una mezcla arriba y guárdala aquí para después.', pt: 'Crie uma mistura acima e salve aqui para depois.', de: 'Erstelle oben einen Mix und speichere ihn hier für später.', fr: 'Créez un mélange ci-dessus, puis enregistrez-le ici.', ja: '上でミックスを作り、ここに保存しておきましょう。' },
   footer: { en: 'No internet needed, and keeps playing when the screen is locked.', es: 'No necesita internet y sigue sonando con la pantalla bloqueada.', pt: 'Não precisa de internet e continua tocando com a tela bloqueada.', de: 'Kein Internet nötig, spielt auch bei gesperrtem Bildschirm weiter.', fr: "Aucun internet requis, continue de jouer écran verrouillé.", ja: 'インターネット不要。画面ロック中も再生を続けます。' },
   settingsSectionLabel: { en: 'Settings', es: 'Ajustes', pt: 'Configurações', de: 'Einstellungen', fr: 'Réglages', ja: '設定' },
+  settingsAutoPlayLabel: { en: 'Auto Play', es: 'Reproducción automática', pt: 'Reprodução automática', de: 'Automatische Wiedergabe', fr: 'Lecture automatique', ja: '自動再生' },
+  settingsAutoPlayHint: { en: 'Pressing any sound plays it right away, so you don’t need to tap Play.', es: 'Al tocar cualquier sonido se reproduce enseguida, sin necesidad de pulsar Reproducir.', pt: 'Tocar em qualquer som o reproduz na hora, sem precisar apertar Reproduzir.', de: 'Ein Sound spielt sofort, wenn du ihn auswählst – ohne extra auf Wiedergabe zu tippen.', fr: 'Appuyer sur un son le joue tout de suite, sans avoir à appuyer sur Lecture.', ja: 'サウンドをタップするとすぐに再生されます。再生ボタンを押す必要はありません。' },
   settingsBackgroundLabel: { en: 'Keep playing when locked or backgrounded', es: 'Seguir sonando con pantalla bloqueada', pt: 'Continuar tocando com tela bloqueada', de: 'Weiterspielen bei gesperrtem Bildschirm', fr: "Continuer en arrière-plan / écran verrouillé", ja: 'ロック中もバックグラウンド再生' },
   settingsBackgroundHint: { en: 'Turn off to pause automatically when you leave the app.', es: 'Desactívalo para pausar al salir de la app.', pt: 'Desative para pausar ao sair do app.', de: 'Deaktivieren, um beim Verlassen der App zu pausieren.', fr: "Désactivez pour mettre en pause en quittant l'app.", ja: 'オフにするとアプリを離れると自動的に一時停止します。' },
   settingsHapticsLabel: { en: 'Haptic feedback', es: 'Vibración táctil', pt: 'Retorno tátil', de: 'Haptisches Feedback', fr: 'Retour haptique', ja: '触覚フィードバック' },
