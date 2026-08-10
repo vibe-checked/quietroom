@@ -592,20 +592,65 @@ function ceilingFanGenerator() {
   };
 }
 
-// Window AC unit: a lower, slightly beating compressor drone with more
-// broadband hiss — reads as rattly/mechanical rather than a clean fan hum.
+// Window AC unit: the compressor motor kicks on with a rattly spin-up
+// (not just a static drone), settles into a steady blowing hum, then
+// cycles on again infrequently — real units don't run at one constant
+// tone forever, they cycle their compressor on and off.
 function acUnitGenerator() {
-  let phase = 0;
   let lp = 0;
+  // Three separate phase accumulators (in cycles, 0-1) rather than one
+  // shared "phase * frequency" term - ramping frequency during a kick
+  // needs the instantaneous frequency integrated over time, not scaled
+  // against an ever-growing sample counter, or the pitch ramp distorts
+  // more and more the longer the loop has been running.
+  let acc1 = 0;
+  let acc2 = 0;
+  let acc3 = 0;
+  let clunkEnv = 1;
+  let clunkPrev = 0;
+  let kickT = 0;
+  let inKick = true; // starts mid-kick so playback always opens with the motor spinning up
+  let cooldown = 0;
+  const KICK_RAMP = Math.floor(SAMPLE_RATE * 1.1);
   return () => {
-    phase += 1;
-    const hum =
-      Math.sin((2 * Math.PI * 45 * phase) / SAMPLE_RATE) * 0.28 +
-      Math.sin((2 * Math.PI * 91 * phase) / SAMPLE_RATE) * 0.16 +
-      Math.sin((2 * Math.PI * 136 * phase) / SAMPLE_RATE) * 0.08;
+    if (cooldown <= 0 && !inKick) {
+      inKick = true;
+      kickT = 0;
+      clunkEnv = 1;
+    }
+    if (!inKick) cooldown -= 1;
+
+    let freqMul = 1;
+    if (inKick) {
+      kickT += 1;
+      freqMul = Math.min(1, 0.15 + 0.85 * (kickT / KICK_RAMP));
+      if (kickT >= KICK_RAMP) {
+        inKick = false;
+        // Real compressors cycle every few minutes, but this is a 24s
+        // loop - 15-35s keeps a re-kick audible without feeling frequent.
+        cooldown = Math.floor((15 + Math.random() * 20) * SAMPLE_RATE);
+      }
+    }
+
+    acc1 += (45 * freqMul) / SAMPLE_RATE;
+    acc1 -= Math.floor(acc1);
+    acc2 += (91 * freqMul) / SAMPLE_RATE;
+    acc2 -= Math.floor(acc2);
+    acc3 += (136 * freqMul) / SAMPLE_RATE;
+    acc3 -= Math.floor(acc3);
+    const hum = Math.sin(2 * Math.PI * acc1) * 0.28 + Math.sin(2 * Math.PI * acc2) * 0.16 + Math.sin(2 * Math.PI * acc3) * 0.08;
     const w = Math.random() * 2 - 1;
     lp = lp * 0.55 + w * 0.45;
-    return hum + lp * 0.65;
+
+    // A bright, rattly clunk right at the moment the compressor kicks on
+    // - a relay/motor-start transient, distinct from the steady hum.
+    const clunkHp = w - clunkPrev;
+    clunkPrev = w;
+    const clunk = clunkEnv * clunkHp;
+    clunkEnv *= 0.985;
+
+    const kickBoost = inKick ? 1 + (1 - kickT / KICK_RAMP) * 0.5 : 1;
+    return (hum + lp * 0.65) * Math.max(0.3, freqMul) * kickBoost + clunk * 1.2;
   };
 }
 
@@ -1947,9 +1992,9 @@ function makeStyles(t: Theme) {
       justifyContent: 'center',
     },
     tileActive: { backgroundColor: t.accent, borderColor: t.accent },
-    tileLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    tileIcon: { fontSize: 18 },
-    tileText: { color: t.textSecondary, fontSize: 15, fontWeight: '600' },
+    tileLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
+    tileIcon: { fontSize: 18, flexShrink: 0 },
+    tileText: { color: t.textSecondary, fontSize: 15, fontWeight: '600', flexShrink: 1 },
     tileTextActive: { color: t.accentText },
     tileSlider: { width: '100%', height: 28, marginTop: 4 },
 
