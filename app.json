@@ -2,7 +2,7 @@
   "expo": {
     "name": "Quiet Room",
     "slug": "quietroom",
-    "version": "1.13",
+    "version": "1.14",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -10,6 +10,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.markutilitylabs.quietroom",
       "buildNumber": "1",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -37,7 +38,16 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-asset"
+      "expo-asset",
+      [
+        "@react-native-firebase/app",
+        { "ios": { "disableSPM": true } }
+      ],
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        { "ios": { "useFrameworks": "static" } }
+      ]
     ]
   }
 }
