@@ -2,7 +2,7 @@
   "expo": {
     "name": "Quiet Room",
     "slug": "quietroom",
-    "version": "1.14",
+    "version": "1.15",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,8 @@
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "appleTeamId": "XJ2F96322L"
     },
     "android": {
       "package": "com.markutilitylabs.quietroom",
@@ -32,21 +33,32 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 220,
+          "imageWidth": 260,
           "resizeMode": "contain",
-          "backgroundColor": "#180f0a"
+          "backgroundColor": "#180f0a",
+          "dark": {
+            "backgroundColor": "#180f0a"
+          }
         }
       ],
       "@react-native-community/datetimepicker",
       "expo-asset",
       [
         "@react-native-firebase/app",
-        { "ios": { "disableSPM": true } }
+        {
+          "ios": {
+            "disableSPM": true
+          }
+        }
       ],
       "@react-native-firebase/crashlytics",
       [
         "expo-build-properties",
-        { "ios": { "useFrameworks": "static" } }
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
       ]
     ]
   }
